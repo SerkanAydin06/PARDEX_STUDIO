@@ -96,3 +96,5 @@ Sıkı izolasyon, native abonelik CLI'larını **durduran** güvenlik kapısıd�
 ## 2H — Tek seferlik, önceden onaylı AI vardiya planlama
 
 Bir veya iki ayrı ayrı onaylı işi belirli bir zaman aralığına kaydeden çevrimdışı `app/shift_scheduler.py` ve varsayılan kuru-çalıştırmalı `app/scheduler_cli.py` eklendi. **Kendiliğinden 7/24 çalışmaz, OS seviyesinde izole değildir.** Riskli native yürütme ayrıca iki açık izin gerektirir ve sıkı modda yasaktır. [Ayrıntılar](docs/PHASE2H_SCHEDULED_SHIFTS.md).
+
+Windows'ta **`05_AI_VARDIYA_PLANLAYICI.cmd`** Türkçe plan oluşturma, listeleme ve ücretsiz vade kontrolü ekranını açar. Bu pencere kendi başına bir zamanlayıcı servisi başlatmaz.
