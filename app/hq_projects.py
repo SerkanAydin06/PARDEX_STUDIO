@@ -383,8 +383,23 @@ def _commit(folder, message):
     # This is invoked on PARDEX-owned copies/new projects only, never on an
     # attached original. Refuse sensitive paths even if .gitignore was changed.
     from project_delivery import _private
-    if _git(folder, 'add', '-A') is None:
+    # Enumerate paths before staging. Never stage AI policy files or secrets.
+    inventory = _git(folder, 'ls-files', '--cached', '--others', '--exclude-standard', '-z')
+    if inventory is None:
         return False
+    if inventory.returncode or (inventory.stdout and not inventory.stdout.endswith('\0')):
+        raise RuntimeError('Git dosya listesi eksik; güvenli işlem iptal')
+    listed = list(dict.fromkeys(x for x in inventory.stdout.split('\0') if x))
+    policy = {'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'SECURITY.md'}
+    unsafe = [name for name in listed
+              if any(_private(part) for part in Path(name).parts) and name not in policy]
+    if unsafe:
+        raise ValueError('Gizli/özel dosya Git commit işleminden engellendi: ' + ', '.join(unsafe[:6]))
+    safe = [name for name in listed if name not in policy]
+    for i in range(0, len(safe), 50):
+        added = _git(folder, 'add', '-A', '--', *safe[i:i + 50])
+        if added is None or added.returncode:
+            raise RuntimeError('Güvenli Git stage işlemi başarısız; commit yapılmadı')
     staged = _git(folder, 'diff', '--cached', '--name-only', '-z')
     if staged is None or staged.returncode:
         _git(folder, 'reset', '-q')
