@@ -300,7 +300,7 @@ class Studio(tk.Tk):
         if not candidate:messagebox.showwarning('Önce kopya','Deneme kopyası yok.');return
         if not messagebox.askyesno('Çekirdek regresyonu ve AI denetimi','Önce tüm yerel testler çalıştırılacak. Geçerse Claude ve Gemini iki ayrı AI incelemesi yapacak. Devam mı?'):return
         def worker():
-            results=evolution.regression_gate(candidate)
+            results=evolution.regression_gate(candidate,owner_confirms=True)
             self.log('Regresyon testi: '+str(results)[:600])
             if not results['ok']:return
             for provider in ('Claude','Gemini'):
