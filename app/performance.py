@@ -30,7 +30,7 @@ def report(path=None,project=None):
                     'owner_accepted':accepted,'owner_rejected':len(reviewed)-accepted,
                     'reviewed_samples':len(reviewed),
                     'awaiting_review':sum(r['result_code']=='verified' and r['owner_review']=='pending' for r in done),
-                    'failed':sum(r['result_code'] in ('ai_failed','test_failed','exception','interrupted') for r in done),
+                    'failed':sum(r['result_code'] in ('ai_failed','test_failed','qa_failed','exception','interrupted') for r in done),
                     'median_elapsed_seconds':round(median(durations),2) if durations else None,
                     'acceptance_rate_reviewed':round(accepted/len(reviewed),3) if reviewed else None})
     return {'total_attempts':len(rows),

@@ -79,3 +79,7 @@ Yerel risk temelli görev planları ve kullanıcı kabulüyle bağımlılık kon
 ## Aşama 2C — AI performans kanıtı (deneysel)
 
 **AI Genel Müdür → AI performans raporu (ücretsiz)** ile görev türüne göre gerçek yerel AI çalışma süreleri, teknik test geçişleri, senin kabul/red kararların ve başarısız tekrarlar ayrı ölçülür. Yeterli kanıt oluşmadan model değiştirilmez; yalnızca kullanıcı onaylı küçük pilot önerilir. Gerçek token, abonelikte kalan kota veya para tasarrufu bilinmiyor. [Teknik ayrıntı](docs/PHASE2C_MEASURED_AI.md).
+
+
+## 2D — Bağımsız AI Kalite Müdürü
+AI Genel Müdür, Normal/Kritik planlarda farklı sağlayıcıdan bir bağımsız inceleme görevi oluşturur. İnceleme sonucu yapılandırılmış PASS/FAIL ve kısa bulgular ile kaydedilir. Bu **bir AI iddiasıdır**; gerçek doğrulama ve sahibin kabulü ayrıca gerekir. Sahibi onaylamadan model değiştirilmez veya kod yayınlanmaz. Aynı iş/test profilini ayrı proje kopyalarında sınayan, AI çağrısı yapmayan A/B pilot kayıtları da arayüze eklendi. Ayrıntılar: [2D kalite ve A/B sınırlamaları](docs/PHASE2D_INDEPENDENT_QA.md).

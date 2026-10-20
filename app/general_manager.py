@@ -6,6 +6,7 @@ import uuid
 import core
 import task_queue as q
 import performance
+import quality_manager
 
 RISKS=('Basit','Normal','Kritik')
 TEMPLATES={
@@ -45,7 +46,9 @@ def create(project,goal,risk='Normal',priority=3,path=None):
         if stage['kind']=='Mimari / Plan':
             detail='Ilgili dosyalari, testleri ve riskleri kisa planla; kod degistirme.'
         elif stage['kind']=='Inceleme / Analiz':
-            detail='Onceki kod farkini ve testleri bagimsiz denetle; kod degistirme.'
+            detail=('KODU DEGISTIRME. Onceki kodu bagimsiz denetle: test, gizli veri, lisans, risk ve rollback. '
+                    'En son iki satir: PARDEX_QA_VERDICT=PASS veya PARDEX_QA_VERDICT=FAIL; '
+                    'PARDEX_QA_FINDINGS=10-240 karakter tek satir delil. Delil yoksa FAIL.')
         else:
             detail='Kucuk degisikliklerle uygula ve test et; push, yayin ve satin alma yapma.'
         title=planned['goal'][:180]+' | '+stage['department']+': '+detail
@@ -53,6 +56,8 @@ def create(project,goal,risk='Normal',priority=3,path=None):
                         quality=stage['quality'],priority=priority,max_minutes=stage['max_minutes'],
                         path=path,depends_on=task_ids[-1:] if task_ids else ())
         task_ids.append(task['id'])
+        if stage['kind']=='Inceleme / Analiz':
+            quality_manager.register_review(task_ids[-2],task_ids[-1],path)
     ident='PLAN-'+uuid.uuid4().hex[:12]
     with q._conn(path) as db:
         db.execute('BEGIN IMMEDIATE')
@@ -98,4 +103,5 @@ def dashboard(path=None):
         'estimated_max_cli_calls':sum(p['call_ceiling'] for p in plans),
         'observed_attempts':sum(p['invocations_observed'] for p in plans),
         'subscription_remaining_tokens_known':False,'paid_provider_api_needed':False,
-        'observed_execution_metrics':observed,'advisory_experiments':performance.recommendations(path)}
+        'observed_execution_metrics':observed,'advisory_experiments':performance.recommendations(path),
+        'independent_qa_evidence':quality_manager.review_dashboard(path)}

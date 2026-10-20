@@ -40,3 +40,9 @@ SQLite görev kalıcılığı, öncelik, eşzamanlı çalışan engeli, sahip on
 
 ## Aşama 2B — AI Genel Müdür doğrulaması
 Yerel geliştirme dalında 141 test başarıyla tamamlandı. GitHub CI ve gerçek Windows/CLI hesapları ayrıca doğrulanmalıdır. Görev bağımlılıkları ve önceki AI notunun yalnızca kabul sonrasında aktarılması için testler eklendi.
+
+
+## 2D — Bağımsız kalite ve karşılaştırma
+- Yerelde önceki aşamada 151 temel regresyon testi başarılıydı; 2D için ek QA/pilot testleri eklendi. Bu PR'ın kesin sonuçları GitHub Actions üzerinden doğrulanmalıdır.
+- Yeni kontroller: farklı sağlayıcı, gerekli QA marker, eksik delilde fail-closed, ayrı sahip kabulü, eski review uyumu, deneme bağı geçerliliği ve aynı görevli eşleştirilmiş pilot kaydı.
+- Gerçek Windows, motor ve ücretli AI aboneliği entegrasyonları henüz uçtan uca doğrulanmadı. Gerçek token, kredi maliyeti ve tasarruf oranı bilinmiyor.

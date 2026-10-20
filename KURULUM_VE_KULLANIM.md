@@ -58,3 +58,7 @@ Hesap açma ve doğrulama, özel oyun varlıklarının 2D/3D üretilmesi, tam Un
 ## 8 — İlk plan
 
 Büyük ekip kurmadan **tek bir gelir denemesi** yap: 14 gün içinde minimal prototip, ardından oynanış/görsel senin onayın, test ve yayın maliyet listesi. Gelir garantisi yok; fikri küçük maliyetle doğrula. Tüm projeleri değiştirecek kararı ilk oyun için alma.
+
+
+## AI Kalite Müdürü ve A/B pilotu (2D)
+AI Genel Müdür'de Normal/Kritik plan açıldığında üreticiden farklı bir AI için QA işi de onay kuyruğuna kaydedilir. Önce kodlama görevini sen kabul eder, sonra reviewer görevini ayrıca başlatırsın. Reviewer PASS veya FAIL delili verir; sen onaylamadan kalite kapısı geçilmiş sayılmaz. A/B pilotu oluşturmak AI kullanmaz, kendi başına ödeme veya model değişimi yapmaz. Aynı görevi aynı test profiliyle farklı proje kopyalarında en az üç çift çalıştırıp sonuçlarını elle ekleyebilirsin. Gerçek token kullanımını veya tasarrufu şimdilik ölçmüyoruz.

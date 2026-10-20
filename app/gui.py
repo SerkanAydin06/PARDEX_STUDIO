@@ -6,7 +6,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import webbrowser
 import core
 import brain
@@ -15,6 +15,7 @@ import company
 import task_queue
 import general_manager
 import performance
+import quality_manager
 
 BG='#0c1220'; PANEL='#172236'; PANEL2='#202e46'; FG='#ebf2ff'; SUB='#aebdd7'; BLUE='#628eea'; GREEN='#60d4ac'
 
@@ -542,6 +543,10 @@ class Studio(tk.Tk):
         self.manager_list.bind('<<TreeviewSelect>>',self.manager_select)
         self.btn(p,'Planları yenile',self.manager_refresh)
         self.btn(p,'AI performans raporu (ücretsiz)',self.manager_metrics)
+        self.btn(p,'Bağımsız QA raporu (ücretsiz)',self.manager_quality)
+        self.btn(p,'A/B pilotu planla (çağrısız)',self.manager_pilot_create)
+        self.btn(p,'A/B pilotlarını gör',self.manager_pilot_report)
+        self.btn(p,'Seçili görevin denemesini kaydet',self.manager_pilot_record)
         self.manager_info=self.lbl(p,'','Dim.TLabel');self.manager_info.pack(anchor='w',pady=6)
         self.hint(p,'Basit: 1 AI. Normal: kod + bağımsız inceleme. Kritik: plan + kod + inceleme. '
                  'Tahmini çağrı sayısı gerçek abonelik token kotası değildir.')
@@ -601,6 +606,69 @@ class Studio(tk.Tk):
             messagebox.showinfo('PARDEX — Gözlenen AI verimliliği',"\n".join(lines))
         except Exception as error:
             messagebox.showerror('Performans raporu',str(error))
+
+    def manager_quality(self):
+        try:
+            evidence=quality_manager.review_dashboard()
+            lines=[f"Bağımsız inceleme: {evidence['registered']}",
+                f"Geçerli PASS + senin kabulün: {evidence['quality_gates_passed']}"]
+            for item in evidence['reviews'][:15]:
+                lines.append(f"{item['review_task_id']}: {item['verdict']} / "
+                             f"{item['review_status']} / farklı AI: {item['independent_provider']}")
+            lines.append("AI PASS bir iddiadır; otomatik yayın veya güvenlik sertifikası değildir.")
+            messagebox.showinfo('Kalite Müdürü','\n'.join(lines))
+        except Exception as err:messagebox.showerror('QA raporu',str(err))
+
+    def manager_pilot_create(self):
+        project=self.active()
+        if not project:return
+        profile=simpledialog.askstring('Model A/B pilotu','Aynı test profili:',
+            initialvalue='unit tests + engine validation',parent=self)
+        if profile is None:return
+        if not messagebox.askyesno('Ücretsiz pilot planı',
+            'Bu işlem AI çalıştırmaz.\nEn az 3 çift izole proje testi gerektirir.'
+            '\nHer denemeyi ayrıca sen onaylayacaksın.\nPilot açılsın mı?'):return
+        try:
+            plan=quality_manager.register_pilot(self.v_kind.get(),
+                self.manager_goal.get('1.0','end').strip(),
+                core.project_type(project),profile)
+            messagebox.showinfo('Pilot oluşturuldu',
+                f"ID: {plan['id']}\nAynı görevi ayrı proje kopyalarında Codex ve Gemini ile dene."
+                '\nBaşarılı ve başarısız denemeleri kaydet.')
+        except Exception as err:messagebox.showerror('Pilot açılamadı',str(err))
+
+    def manager_pilot_report(self):
+        try:
+            pilots=quality_manager.list_pilots()
+            if not pilots:
+                messagebox.showinfo('A/B pilotu','Henüz pilot yok.');return
+            lines=[f"{p['id']}: {p['paired_trials']} / 3 deneme çifti; "
+                f"olgun: {p['fair_quality_comparison_ready']}" for p in pilots[:15]]
+            lines.append('\nGerçek token/kredi tasarrufu ve model üstünlüğü kanıtlanmış değil.')
+            messagebox.showinfo('A/B gözlem raporu','\n'.join(lines))
+        except Exception as err:messagebox.showerror('A/B raporu',str(err))
+
+    def manager_pilot_record(self):
+        try:
+            task=self.v_queue_id.get().strip()
+            if not task:raise ValueError('Önce Görev Merkezi’nde bitmiş görev seç')
+            pilots=quality_manager.list_pilots()
+            if not pilots:raise ValueError('Önce bir pilot oluştur')
+            pid=simpledialog.askstring('Pilot ID','Deneme pilotunun ID bilgisi:',
+                initialvalue=pilots[0]['id'],parent=self)
+            if pid is None:return
+            pair=simpledialog.askinteger('Çift numarası','Tur 1-100:',
+                initialvalue=1,minvalue=1,maxvalue=100,parent=self)
+            if pair is None:return
+            if not messagebox.askyesno('Bağımsız test beyanı',
+                'Bu görev diğer modelden AYRI bir proje kopyasında, aynı iş/test '
+                'koşullarında mı çalıştı? Bu koşullar teknik olarak henüz otomatik kanıtlanmıyor.'):
+                return
+            report=quality_manager.record_pilot_trial(pid,pair,task,owner_confirms_isolation=True)
+            messagebox.showinfo('A/B kaydedildi',
+                f"Tamamlanan karşılaştırma çifti: {report['paired_trials']}\n"
+                'Hiçbir model kendiliğinden değiştirilmedi.')
+        except Exception as err:messagebox.showerror('A/B kaydedilemedi',str(err))
 
     def manager_select(self,_event=None):
         selection=self.manager_list.selection()

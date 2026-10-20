@@ -48,3 +48,12 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 - Teknik test ile insan onayını ayıran metrikler.
 - Pilot önerisi için yeterli örnek şartı ve kullanıcı onayı.
 - Gelecek: gerçek ölçülebilir kredi/token adaptörleri, bağımsız QA ve A/B testleri.
+
+
+### Aşama 2D — Bağımsız AI Kalite Müdürü
+- [x] Ayrı AI sağlayıcısı kullanarak sahip onaylı QA sözleşmesi
+- [x] PASS/FAIL delil biçimi; başarısız veya kanıtsız inceleme geçersiz
+- [x] Offline Codex/Gemini karşılaştırma pilotu, aynı senaryo/test profili ve gözlenen sonuçlar
+- [x] Türkçe AI Genel Müdür arayüzünden QA raporu ve pilot yönetimi
+- [ ] Gerçek VM/read-only denetçi sandbox'u ve sabitlenmiş tekrar üretilebilir deneyler (2E)
+- [ ] Sağlayıcı desteklerse doğrulanabilir gerçek token/kredi raporu; otomatik model geçişi yok (2E)
