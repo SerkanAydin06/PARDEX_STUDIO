@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
+import time
 import uuid
 import core
 
@@ -36,6 +37,17 @@ def _conn(path=None):
         PRIMARY KEY(task_id,prerequisite_id)
     )''')
     db.execute('CREATE INDEX IF NOT EXISTS task_dependency_source ON task_dependencies(prerequisite_id)')
+    # One safe metrics row per execution, including failed retries.
+    # Never store game briefs, prompts, logs or private provider credentials.
+    db.execute('''CREATE TABLE IF NOT EXISTS task_attempt_metrics (
+        task_id TEXT NOT NULL, attempt INTEGER NOT NULL, project TEXT NOT NULL,
+        kind TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
+        started_at TEXT NOT NULL, elapsed_seconds REAL, ai_ok INTEGER,
+        verified INTEGER, result_code TEXT NOT NULL DEFAULT 'running',
+        owner_review TEXT NOT NULL DEFAULT 'pending',
+        PRIMARY KEY(task_id,attempt)
+    )''')
+    db.execute('CREATE INDEX IF NOT EXISTS metrics_provider_kind ON task_attempt_metrics(provider,kind)')
     if 'handoff_note' not in {row[1] for row in db.execute('PRAGMA table_info(tasks)')}:
         db.execute("ALTER TABLE tasks ADD COLUMN handoff_note TEXT NOT NULL DEFAULT ''")
     db.execute('CREATE INDEX IF NOT EXISTS task_status_priority ON tasks(status,priority DESC,created_at)')
@@ -111,7 +123,7 @@ def events(ident,path=None):
         return [dict(x) for x in db.execute('SELECT * FROM task_events WHERE task_id=? ORDER BY id',(ident,))]
 
 
-def _transition(ident,old,new,action,note='',path=None,fields=None):
+def _transition(ident,old,new,action,note='',path=None,fields=None,metric=None):
     with _conn(path) as db:
         db.execute('BEGIN IMMEDIATE')
         row=_row(db,ident)
@@ -121,6 +133,12 @@ def _transition(ident,old,new,action,note='',path=None,fields=None):
         db.execute('UPDATE tasks SET status=?,updated_at=?'+extra+' WHERE id=?',
                    (new,core.now(),*fields.values(),ident))
         _event(db,ident,action,note)
+        if metric:
+            allowed={'elapsed_seconds','ai_ok','verified','result_code','owner_review','provider','model'}
+            if set(metric)-allowed:raise ValueError('Unsupported metric column')
+            update=', '.join(k+'=?' for k in metric)
+            db.execute('UPDATE task_attempt_metrics SET '+update+' WHERE task_id=? AND attempt=?',
+                       (*metric.values(),ident,row['attempts']))
         db.commit()
         return _row(db,ident)
 
@@ -138,7 +156,7 @@ def cancel(ident,path=None):
 
 def accept(ident,path=None):
     return _transition(ident,('awaiting-acceptance',),'accepted','owner-accepted',
-                       path=path,fields={'ended_at':core.now()})
+                       path=path,fields={'ended_at':core.now()},metric={'owner_review':'accepted'})
 
 
 def request_rework(ident,reason,path=None):
@@ -146,7 +164,7 @@ def request_rework(ident,reason,path=None):
     if len(reason)<4:raise ValueError('Gerekce gerekli')
     return _transition(ident,('awaiting-acceptance',),'needs-attention',
                        'owner-rejected',reason,path=path,
-                       fields={'result_note':core.redact_log_output(reason)[:350]})
+                       fields={'result_note':core.redact_log_output(reason)[:350]},metric={'owner_review':'rejected'})
 
 
 def reset_for_manual_retry(ident,path=None):
@@ -198,12 +216,15 @@ def claim_next(day_limit=8,path=None):
         if row is None:return None
         if core.usage_count()>=day_limit:raise RuntimeError('Gunluk AI cagri limiti doldu')
         row=dict(row)
-        provider,_=core.route(row['kind'],row['provider_preference'],row['quality'])
+        provider,model=core.route(row['kind'],row['provider_preference'],row['quality'])
         exe={'Claude':'claude','Codex':'codex','Gemini':'gemini'}[provider]
         if not core.which(exe):raise RuntimeError(provider+' kurulu degil')
         if core.project_type(row['project'])=='unknown':raise RuntimeError('Proje bulunamadi')
         db.execute('UPDATE tasks SET status="running",started_at=?,updated_at=?,attempts=attempts+1 WHERE id=?',
                    (core.now(),core.now(),row['id']))
+        db.execute('''INSERT INTO task_attempt_metrics(task_id,attempt,project,kind,provider,model,started_at)
+                      VALUES(?,?,?,?,?,?,?)''',
+                   (row['id'],row['attempts']+1,row['project'],row['kind'],provider,model,core.now()))
         _event(db,row['id'],'claimed',provider+' | manually started')
         db.commit()
         return _row(db,row['id'])
@@ -213,6 +234,7 @@ def execute_one(day_limit=8,path=None,on_update=None):
     """Run only after explicit UI action. No daemon, auto-merge, deployment or auto retry."""
     item=claim_next(day_limit,path)
     if item is None:return None
+    start_clock=time.monotonic()
     try:
         prior=dependencies(item['id'],path)
         if any(p['status']!='accepted' for p in prior):
@@ -230,18 +252,30 @@ def execute_one(day_limit=8,path=None,on_update=None):
                 'model_used':str(outcome.get('model',''))[:60],
                 'verified':int(bool(outcome.get('verified'))),
                 'handoff_note':core.redact_log_output(str(outcome.get('output','')))[:650] if good else ''}
-        return _transition(item['id'],('running',),status,'finished',note,path,fields=fields)
+        default_provider,default_model=core.route(item['kind'],item['provider_preference'],item['quality'])
+        reported_provider=outcome.get('provider')
+        safe_provider=reported_provider if reported_provider in ('Claude','Codex','Gemini') else default_provider
+        safe_model=core.redact_log_output(str(outcome.get('model') or default_model))[:60]
+        code='verified' if good else ('ai_failed' if not outcome.get('ai_ok') else 'test_failed')
+        telemetry={'elapsed_seconds':max(0.,time.monotonic()-start_clock),
+                   'ai_ok':int(bool(outcome.get('ai_ok'))),
+                   'verified':int(bool(outcome.get('verified'))),
+                   'result_code':code,'provider':safe_provider,'model':safe_model}
+        return _transition(item['id'],('running',),status,'finished',note,path,fields=fields,metric=telemetry)
     except Exception as err:
         note='Gorev durdu: '+type(err).__name__+' — '+core.redact_log_output(str(err))[:220]
         return _transition(item['id'],('running',),'needs-attention','failed',note,path,
-                           fields={'ended_at':core.now(),'result_note':note,'verified':0})
+                           fields={'ended_at':core.now(),'result_note':note,'verified':0},
+                           metric={'elapsed_seconds':max(0.,time.monotonic()-start_clock),
+                                   'ai_ok':0,'verified':0,'result_code':'exception'})
 
 
 def recover_interrupted(ident,confirm=False,path=None):
     if confirm is not True:raise PermissionError('Sahip onayi gerekli')
     return _transition(ident,('running',),'needs-attention','owner-recovery',
         'Outcome unknown; inspect logs and files',path,
-        fields={'ended_at':core.now(),'result_note':'Onceki calisma sonucu bilinmiyor'})
+        fields={'ended_at':core.now(),'result_note':'Onceki calisma sonucu bilinmiyor'},
+        metric={'result_code':'interrupted'})
 
 
 def statistics(path=None):

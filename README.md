@@ -75,3 +75,7 @@ Görevler yerel SQLite veritabanına kaydedilir. Sahip onayı olmadan AI çağr�
 ## Aşama 2B — AI Genel Müdür
 
 Yerel risk temelli görev planları ve kullanıcı kabulüyle bağımlılık kontrolü eklendi. Basit işte 1, orta riskte 2, kritik işte en fazla 3 AI çağrısı için görev hazırlanır; gerçek kalan token kotası bilinmez. [Nasıl çalışıyor?](docs/PHASE2_GENERAL_MANAGER.md)
+
+## Aşama 2C — AI performans kanıtı (deneysel)
+
+**AI Genel Müdür → AI performans raporu (ücretsiz)** ile görev türüne göre gerçek yerel AI çalışma süreleri, teknik test geçişleri, senin kabul/red kararların ve başarısız tekrarlar ayrı ölçülür. Yeterli kanıt oluşmadan model değiştirilmez; yalnızca kullanıcı onaylı küçük pilot önerilir. Gerçek token, abonelikte kalan kota veya para tasarrufu bilinmiyor. [Teknik ayrıntı](docs/PHASE2C_MEASURED_AI.md).

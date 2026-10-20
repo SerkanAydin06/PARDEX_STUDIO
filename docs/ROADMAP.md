@@ -42,3 +42,9 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 ## Aşama 2B — Yapılan ilk paket
 - [x] Basit/Normal/Kritik planlar, kalıcı görev bağımlılıkları ve sahibin aşama bazlı kabulü.
 - [ ] Gerçek otomatik AI CEO planlaması, bağımsız entegrasyon testleri, gerçek maliyet ölçümü, daemon ve PR işçisi daha sonra. Mevcut uygulama onaylı yerel prototiptir.
+
+## Phase 2C — AI performans telemetrisi
+- Yerel, özel SQLite'da deneme geçmişi ve süre.
+- Teknik test ile insan onayını ayıran metrikler.
+- Pilot önerisi için yeterli örnek şartı ve kullanıcı onayı.
+- Gelecek: gerçek ölçülebilir kredi/token adaptörleri, bağımsız QA ve A/B testleri.

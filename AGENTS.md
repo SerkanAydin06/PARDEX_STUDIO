@@ -41,3 +41,10 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 
 - `app/general_manager.py`: AI çağrısız küçük görev planları ve proje bazlı kabul kapıları; bir arka plan botu değildir.
 - `app/task_queue.py`: Yeni bağımlılık grafiği, kabul edilmeden sonraki görevi çalıştırmama, sınırlı veri devri.
+
+## Phase 2C — measured evidence, not marketing claims
+- AI CLI command success, engine verification, and human owner acceptance are different outcomes.
+- Store only local attempt metrics; never copy proprietary briefs, logs or secrets into telemetry.
+- Never invent exact subscription tokens, costs, model prices or percentages of savings.
+- No provider self-switching, AI-initiated approval, auto-retry or unreviewed software publication.
+- Use small, owner-approved pilot experiments when sufficient actual reviewed observations exist.
