@@ -5,6 +5,7 @@ import json
 import uuid
 import core
 import task_queue as q
+import performance
 
 RISKS=('Basit','Normal','Kritik')
 TEMPLATES={
@@ -90,9 +91,11 @@ def list_plans(path=None,limit=50):
 
 def dashboard(path=None):
     plans=list_plans(path)
+    observed=performance.report(path)
     return {'plans_total':len(plans),
         'by_status':{s:sum(p['status']==s for p in plans)
                      for s in ('pending-owner','in-progress','needs-attention','accepted')},
         'estimated_max_cli_calls':sum(p['call_ceiling'] for p in plans),
         'observed_attempts':sum(p['invocations_observed'] for p in plans),
-        'subscription_remaining_tokens_known':False,'paid_provider_api_needed':False}
+        'subscription_remaining_tokens_known':False,'paid_provider_api_needed':False,
+        'observed_execution_metrics':observed,'advisory_experiments':performance.recommendations(path)}

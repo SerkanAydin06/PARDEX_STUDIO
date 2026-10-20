@@ -14,6 +14,7 @@ import evolution
 import company
 import task_queue
 import general_manager
+import performance
 
 BG='#0c1220'; PANEL='#172236'; PANEL2='#202e46'; FG='#ebf2ff'; SUB='#aebdd7'; BLUE='#628eea'; GREEN='#60d4ac'
 
@@ -540,6 +541,7 @@ class Studio(tk.Tk):
         self.manager_list.pack(fill='x',pady=8)
         self.manager_list.bind('<<TreeviewSelect>>',self.manager_select)
         self.btn(p,'Planları yenile',self.manager_refresh)
+        self.btn(p,'AI performans raporu (ücretsiz)',self.manager_metrics)
         self.manager_info=self.lbl(p,'','Dim.TLabel');self.manager_info.pack(anchor='w',pady=6)
         self.hint(p,'Basit: 1 AI. Normal: kod + bağımsız inceleme. Kritik: plan + kod + inceleme. '
                  'Tahmini çağrı sayısı gerçek abonelik token kotası değildir.')
@@ -578,6 +580,27 @@ class Studio(tk.Tk):
             self.manager_list.insert('','end',iid=p['id'],values=(
                 p['goal'][:110],p['risk'],p['status'],p['invocations_observed']))
         self.manager_info.configure(text=f"Plan sayısı: {len(self.manager_list.get_children())}")
+
+    def manager_metrics(self):
+        try:
+            report=performance.report()
+            lines=[f"Gerçekten ölçülen AI denemesi: {report['total_attempts']}",
+                   f"Toplam kaydedilen süre: {report['total_recorded_seconds']} saniye", ""]
+            for item in report['by_provider_and_kind']:
+                duration=(str(item['median_elapsed_seconds'])+" sn"
+                          if item['median_elapsed_seconds'] is not None else 'bilinmiyor')
+                lines.append(f"{item['provider']} / {item['kind']}: {item['attempts']} deneme; "
+                             f"{item['verified']} test, {item['owner_accepted']} kabul, "
+                             f"{item['owner_rejected']} red; medyan {duration}")
+            hints=performance.recommendations()
+            if hints:
+                lines.append("\nYalnızca kontrollü pilot önerileri:")
+                lines.extend(f"{h['kind']}: {h['candidate_provider']} ile test önerilir"
+                             for h in hints)
+            lines.append("\n"+report['note'])
+            messagebox.showinfo('PARDEX — Gözlenen AI verimliliği',"\n".join(lines))
+        except Exception as error:
+            messagebox.showerror('Performans raporu',str(error))
 
     def manager_select(self,_event=None):
         selection=self.manager_list.selection()
