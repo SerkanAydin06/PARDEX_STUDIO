@@ -2,7 +2,7 @@
 
 > Bu depo herkese açıktır. Özel oyun kaynaklarını ve hesap bilgilerini bu depoya yüklemeyin.
 
-# Ultra Pro AI Studio v5.0 — AI Şirket Merkezi (Windows)
+# Ultra Pro AI Studio v5.1 — AI Şirket Merkezi + Kalıcı Görev Kuyruğu (Windows)
 
 > **Çalışan, test edilmiş prototip; bitmiş, sınırsız, tamamen otonom bir şirket değil.**
 
@@ -28,8 +28,8 @@ Bu proje birden fazla Godot, Unity, Unreal, Flutter, Android/Kotlin ve Web proje
 2. `02_AI_CLI_KUR.cmd` ile ihtiyaç duyduğun CLI araçlarını yükle. Her hesap için giriş adımlarını kendi uygulamasında tamamla.
 3. `Projeler` bölümünde yeni bir Godot/Web projesi oluştur veya mevcut Unity/Unreal/Android/Flutter/Godot projesini bağla.
 4. `AI Şirketi` bölümüne şirket hedefini yaz; önce **0 AI** gündemiyle başla. Gerekirse **Claude + Gemini** toplantısına onay ver.
-5. `AI Ekibi` bölümünden görev başlat; `Test & Öğrenme` sonuçlarını incele. Oyun içi/görsel denemeyi sen yapıp onayla.
-6. GitHub deposu açmak istiyorsan `03_CEKIRDEGI_GITHUBA_YUKLE.cmd` kullan; hesabında gerçek yayın yapmadan açık onay sorar.
+5. `AI Ekibi` bölümünde görev oluşturabilir, `Gorev Merkezi` sekmesinden onaylayıp tek tek çalıştırabilirsin. Biten görevin oynanışını/görüntüsünü ayrıca sen kabul edersin.\n6. `AI Ekibi` bölümünden doğrudan görev de başlatabilir; `Test & Öğrenme` sonuçlarını incele. Oyun içi/görsel denemeyi sen yapıp onayla.
+7. GitHub deposu açmak istiyorsan `03_CEKIRDEGI_GITHUBA_YUKLE.cmd` kullan; hesabında gerçek yayın yapmadan açık onay sorar.
 
 ## Ücretsiz / mevcut üyelik araçları
 
@@ -67,3 +67,7 @@ Oyunlarda makro/otomasyon yalnızca kendi oyunların, izin verilen modlama/eriş
 **Doğrulama:** Python testleri ve sanal Linux GUI açılışı geçti. Gerçek Windows, güncel CLI hesapları, GitHub Actions koşusu, masaüstü oyun motorları, gerçek Android cihaz, satın alma ve dağıtım uçtan uca denenmedi. Bu alanlar 'tam otomatik hazır' diye sunulmaz.
 
 Ayrıntılar: [KURULUM_VE_KULLANIM.md](KURULUM_VE_KULLANIM.md), [TEST_RAPORU.md](TEST_RAPORU.md).
+
+## Aşama 2A: Kalıcı Görev Merkezi
+
+Görevler yerel SQLite veritabanına kaydedilir. Sahip onayı olmadan AI çağrısı başlamaz; biten iş kullanıcı görsel/oynanış kabulü bekler. Başarısız işler kendiliğinden tekrar edilmez. Gerçek kalan abonelik kotası **bilinmez**. Ayrıntılar: [Aşama 2A](docs/PHASE2_TASK_CENTER.md).

@@ -12,6 +12,7 @@ import core
 import brain
 import evolution
 import company
+import task_queue
 
 BG='#0c1220'; PANEL='#172236'; PANEL2='#202e46'; FG='#ebf2ff'; SUB='#aebdd7'; BLUE='#628eea'; GREEN='#60d4ac'
 
@@ -45,6 +46,8 @@ class Studio(tk.Tk):
         self.v_subhours=tk.StringVar(value='2')
         self.v_hourvalue=tk.StringVar(value='10')
         self.v_rec=tk.StringVar(value='')
+        self.v_queue_id=tk.StringVar(value='')
+        self.v_queue_priority=tk.IntVar(value=3)
         self._style()
         self._layout()
         self.refresh()
@@ -119,13 +122,13 @@ class Studio(tk.Tk):
         self.lbl(self,textvariable=self.v_proj,style='Dim.TLabel').pack(anchor='w',padx=25)
         self.tabs=ttk.Notebook(self)
         self.p_home=ttk.Frame(self.tabs,padding=16);self.p_proj=ttk.Frame(self.tabs,padding=16)
-        self.p_agent=ttk.Frame(self.tabs,padding=16);self.p_test=ttk.Frame(self.tabs,padding=16)
+        self.p_agent=ttk.Frame(self.tabs,padding=16);self.p_queue=ttk.Frame(self.tabs,padding=16);self.p_test=ttk.Frame(self.tabs,padding=16)
         self.p_assets=ttk.Frame(self.tabs,padding=16);self.p_git=ttk.Frame(self.tabs,padding=16)
         self.p_sys=ttk.Frame(self.tabs,padding=16)
         self.p_council=ttk.Frame(self.tabs,padding=16)
         self.p_radar=ttk.Frame(self.tabs,padding=16)
         self.p_company=ttk.Frame(self.tabs,padding=16)
-        for tab,title in [(self.p_home,'Başlangıç'),(self.p_proj,'Projeler'),(self.p_agent,'AI Ekibi'),
+        for tab,title in [(self.p_home,'Başlangıç'),(self.p_proj,'Projeler'),(self.p_agent,'AI Ekibi'),(self.p_queue,'Gorev Merkezi'),
                 (self.p_test,'Test & Öğrenme'),(self.p_company,'AI Şirketi'),(self.p_council,'Çekirdek Konseyi'),(self.p_radar,'İnternet Radarı'),(self.p_assets,'Görsel Atölyesi'),(self.p_git,'GitHub'),(self.p_sys,'Sistem')]:
             self.tabs.add(tab,text=title)
         foot=ttk.Frame(self);foot.pack(side='bottom',fill='x',padx=24,pady=(0,12))
@@ -133,7 +136,7 @@ class Studio(tk.Tk):
         self.console=tk.Text(foot,height=6,bg=PANEL,fg=SUB,font=('Consolas',9),state='disabled',bd=0,padx=8)
         self.console.pack(fill='x')
         self.tabs.pack(fill='both',expand=True,padx=17,pady=(12,6))
-        self._home();self._projects();self._agents();self._testing();self._company();self._council();self._radar();self._assets();self._github();self._system()
+        self._home();self._projects();self._agents();self._queue_tab();self._testing();self._company();self._council();self._radar();self._assets();self._github();self._system()
 
     def _home(self):
         p=self._inner(self.p_home)
@@ -510,6 +513,136 @@ class Studio(tk.Tk):
         self.btn(row3,'Olculen AI verimliligi',self.show_performance)
         self.count_label=self.lbl(p,'','Dim.TLabel');self.count_label.pack(anchor='w')
         self.hint(p,'İlgili AI hesabında giriş gerekli. Dosya değişikliği yapılmadan önce yedek veya Git kontrol noktası önerilir. İşlem başarısızsa otomatik sonsuz tekrar yapılmaz.')
+
+    def _queue_tab(self):
+        p=self._inner(self.p_queue)
+        self.header(p,'AI Görev Merkezi',
+                    'Çoklu proje, tek onaylı AI işi. Görevler kalıcıdır; başlatma ve sonuç kabulü ayrı işlemdir.')
+        self.hint(p,'AI Ekibi sekmesindeki görev metnini bu kuyruğa ekle. Önce ilgili projeyi seç.')
+        row=ttk.Frame(p);row.pack(anchor='w',pady=6)
+        self.lbl(row,'Öncelik:').pack(side='left')
+        ttk.Spinbox(row,from_=1,to=5,width=5,textvariable=self.v_queue_priority).pack(side='left',padx=8)
+        self.btn(row,'Görevi kuyruğa ekle',self.queue_add)
+        columns=('code','status','priority','project','provider','title')
+        self.queue_table=ttk.Treeview(p,columns=columns,show='headings',selectmode='browse',height=10)
+        for col,label,width in [('code','Kod',110),('status','Durum',145),
+                                ('priority','Öncelik',75),('project','Proje',130),
+                                ('provider','AI',85),('title','Görev',335)]:
+            self.queue_table.heading(col,text=label)
+            self.queue_table.column(col,width=width,stretch=(col=='title'))
+        self.queue_table.pack(fill='both',expand=True,pady=6)
+        self.queue_table.bind('<<TreeviewSelect>>',self.queue_selection)
+        controls=ttk.Frame(p);controls.pack(anchor='w',pady=4)
+        self.btn(controls,'Yenile',self.queue_refresh)
+        self.btn(controls,'AI seçimi / limit önizleme',self.queue_preview)
+        self.btn(controls,'Onayla',self.queue_approve)
+        self.btn(controls,'Onaylı tek görevi çalıştır',self.queue_run)
+        row=ttk.Frame(p);row.pack(anchor='w',pady=4)
+        self.btn(row,'Oynanışı kabul et',self.queue_accept)
+        self.btn(row,'Düzeltme iste',self.queue_reject)
+        self.btn(row,'Yeni onay iste',self.queue_retry)
+        self.btn(row,'İptal et',self.queue_cancel)
+        self.btn(row,'Yarım kalan işi kurtar',self.queue_recover)
+        self.queue_info=self.lbl(p,'','Dim.TLabel');self.queue_info.pack(anchor='w',pady=4)
+        self.hint(p,'Kuyruk kendi başına AI çalıştırmaz. Gerçek token kotası bilinmez. Kodlama CLI erişim sınırları ayrıca geçerlidir.')
+        self.queue_refresh()
+
+    def queue_selection(self,_event=None):
+        selected=self.queue_table.selection()
+        if selected:self.v_queue_id.set(selected[0])
+
+    def queue_refresh(self):
+        selected=self.v_queue_id.get()
+        for item in self.queue_table.get_children():self.queue_table.delete(item)
+        for item in task_queue.list_tasks():
+            self.queue_table.insert('','end',iid=item['id'],values=(
+                item['id'],item['status'],item['priority'],Path(item['project']).name,
+                item['provider_preference'],item['title'][:115]))
+        if selected in self.queue_table.get_children():self.queue_table.selection_set(selected)
+        counts=task_queue.statistics()
+        self.queue_info.configure(text=str(counts['status'])+' | Bugün yerel AI çağrısı: '+str(counts['calls_today_local']))
+
+    def queue_id(self):
+        ident=self.v_queue_id.get()
+        if not ident:raise ValueError('Önce listeden bir görev seç')
+        return ident
+
+    def queue_add(self):
+        try:
+            project=self.active()
+            if not project:return
+            item=task_queue.add_task(project,self.task.get('1.0','end').strip(),self.v_kind.get(),
+                self.v_provider.get(),self.v_quality.get(),int(self.v_queue_priority.get()),int(self.v_mins.get()))
+            self.v_queue_id.set(item['id']);self.queue_refresh()
+            self.log('Onay bekleyen görev: '+item['id'])
+        except Exception as err:messagebox.showerror('Görev eklenemedi',str(err))
+
+    def queue_preview(self):
+        try:
+            r=task_queue.preview_next(int(self.v_day.get()))
+            if not r['ready']:messagebox.showinfo('Kuyruk','Onaylı görev yok');return
+            messagebox.showinfo('AI / Limit önizlemesi',
+                f"Proje: {r['project']}\nTahmini AI: {r['provider_estimate']} ({r['model_estimate']})\n"
+                f"Süre sınırı: {r['max_minutes']} dakika\nBeklenen CLI çağrısı: 1\n"
+                f"Bugün: {r['local_calls_today']}/{r['day_limit']}\n"
+                f"Başlatma engeli: {r['blocked']}\n\n{r['note']}")
+        except Exception as err:messagebox.showerror('Önizleme hatası',str(err))
+
+    def queue_approve(self):
+        try:
+            ident=self.queue_id()
+            if not messagebox.askyesno('Sahip onayı','Seçili AI görevini çalışmaya hazır olarak onaylıyor musun?'):
+                return
+            task_queue.approve(ident);self.queue_refresh()
+        except Exception as err:messagebox.showerror('Onay hatası',str(err))
+
+    def queue_run(self):
+        if not messagebox.askyesno('Kullanım hakkı uyarısı',
+            'Sıradaki ONAYLANMIŞ işi tek AI çağrısıyla başlatacağız. Abonelik kotası tüketilebilir. Devam?'):return
+        def worker():
+            item=task_queue.execute_one(int(self.v_day.get()),on_update=self.log)
+            self.log('Kuyruk: '+(item['id']+' '+item['status'] if item else 'Onaylı görev yok'))
+            self.after(0,self.queue_refresh)
+        self.run_background(worker)
+
+    def queue_accept(self):
+        try:
+            ident=self.queue_id()
+            if not messagebox.askyesno('Oynanış / UI kontrolü',
+                'Oyunu veya uygulamayı açıp bizzat kontrol ettin ve sonucu kabul ediyor musun?'):return
+            task_queue.accept(ident);self.queue_refresh()
+        except Exception as err:messagebox.showerror('Kabul hatası',str(err))
+
+    def queue_reject(self):
+        try:
+            ident=self.queue_id()
+            from tkinter import simpledialog
+            reason=simpledialog.askstring('Düzeltme iste','Düzeltilmesini istediğin yer nedir?')
+            if reason is None:return
+            task_queue.request_rework(ident,reason);self.queue_refresh()
+        except Exception as err:messagebox.showerror('Düzeltme hatası',str(err))
+
+    def queue_retry(self):
+        try:
+            ident=self.queue_id()
+            if not messagebox.askyesno('Yeniden onay','Bu görevi yeniden onay kuyruğuna alalım mı? Otomatik çalışmayacak.'):return
+            task_queue.reset_for_manual_retry(ident);self.queue_refresh()
+        except Exception as err:messagebox.showerror('Yeni onay hatası',str(err))
+
+    def queue_cancel(self):
+        try:
+            ident=self.queue_id()
+            if not messagebox.askyesno('İptal','Görevi iptal etmek istiyor musun?'):return
+            task_queue.cancel(ident);self.queue_refresh()
+        except Exception as err:messagebox.showerror('İptal hatası',str(err))
+
+    def queue_recover(self):
+        try:
+            ident=self.queue_id()
+            if not messagebox.askyesno('Kurtarma onayı',
+                'Yalnızca ilgili AI işleminin artık ÇALIŞMADIĞINDAN EMİNSEN onayla. Otomatik tekrar yapılmayacak.'):return
+            task_queue.recover_interrupted(ident,confirm=True);self.queue_refresh()
+        except Exception as err:messagebox.showerror('Kurtarma hatası',str(err))
 
     def _testing(self):
         p=self._inner(self.p_test)

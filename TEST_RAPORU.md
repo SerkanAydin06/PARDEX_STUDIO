@@ -34,3 +34,6 @@ Durum: 2026-10-20. **Gerçek kullanıcı hesabı veya üretim sistemi üzerinde 
 - Model çıktılarının tamamında doğruluk/performance/gelir garantisi.
 
 **Özet:** Bu, güvenli karar ve görev yönetimine yönelik test edilmiş bir *başlangıç ürünü/prototiptir*; henüz kurulum sonrası tamamen bağımsız çalışan bir oyun şirketi değildir.
+
+## Aşama 2A testleri
+SQLite görev kalıcılığı, öncelik, eşzamanlı çalışan engeli, sahip onayı, günlük kullanım sınırı, başarılı/başarısız test, otomatik tekrarsız hata ve kurtarma, log redaksiyonu için yeni başsız testler eklendi. Gerçek AI oturumları test edilmedi; GitHub Actions sonucunu PR üzerinde ayrıca izle.

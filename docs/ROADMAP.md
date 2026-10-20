@@ -6,6 +6,11 @@
 - [x] Çekirdek testleri, basit motor CI şablonları, GitHub Actions.
 - [x] Hata hafızası, onay kuyruğu, AI şirket gündemi, sürüm metaverisi radarı.
 
+## Tamamlanan 2A: AI Görev Merkezi
+- [x] Yerel SQLite kalıcı iş kuyruğu; öncelik ve tek kuyruk çalışanı; sahip onayı, görsel/oynanış kabulü, açık manuel kurtarma.
+- [x] AI çağrısı harcamayan önizleme ve mevcut günlük yerel kullanım sınırı.
+- [ ] Gerçek AI CEO, görev grafiği, otomatik bağımsız QA, iş başına gerçek token/fiyat ölçümü, arka plan işçileri ve gelir takibi henüz YOK.
+
 ## Öncelikli doğrulama/geliştirme (bitmiş diye sunma)
 - [ ] **P0 — Windows uçtan uca kurulum:** temiz Windows'ta Python, Git, AI CLI kurulum; WinGet bozuksa akış; hesap girişleri ve GUI kullanılabilirliği.
 - [ ] **P0 — Güvenlik denetimi:** subprocess allowlist, shell arg güvenliği, path traversal, prompt injection, kimlik bilgisi/log temizliği, güncelleme rollback.
