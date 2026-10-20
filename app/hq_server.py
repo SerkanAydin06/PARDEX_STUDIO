@@ -15,7 +15,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hq_board as board  # noqa: E402
 import hq_ceo  # noqa: E402
+import hq_org as org  # noqa: E402
 import hq_projects as projects  # noqa: E402
 import hq_research as research  # noqa: E402
 import hq_router as router  # noqa: E402
@@ -37,7 +39,35 @@ class Panel:
         self.ai, self.tester = ai, tester  # test doubles; None = real router / engine tests
         self.run_state = {'running': '', 'last': None, 'error': ''}
         self.prod_state = {'running': '', 'error': ''}
+        self.core_state = {'running': '', 'error': ''}
         self.lock = threading.Lock()
+
+    def core_async(self, rid, step):
+        with self.lock:
+            if self.core_state['running']:
+                raise ValueError('Başka bir çekirdek adımı çalışıyor')
+            self.core_state.update(running=f'{rid}:{step}', error='')
+
+        def work():
+            try:
+                board.core_step(rid, step, self.db)
+            except Exception as exc:
+                self.core_state['error'] = str(exc)[:300]
+                store.event('sistem', 'core-error', rid, str(exc)[:200], self.db)
+            finally:
+                self.core_state['running'] = ''
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        return t
+
+    def org_view(self):
+        return {'departments': org.departments(self.db, include_inactive=True), 'workflow': org.workflow(self.db),
+                'hooks': org.HOOKS, 'modes': org.MODES, 'required': org.REQUIRED, 'versions': org.versions(path=self.db)}
+
+    def board_view(self):
+        return {'chat': board.chat_log(path=self.db), 'proposals': board.proposals(path=self.db),
+                'health': board.health(self.db), 'core': board.core_list(self.db),
+                'core_requirements': board.core_requirements(), 'core_state': dict(self.core_state)}
 
     def produce_async(self, pid):
         with self.lock:
@@ -80,7 +110,7 @@ class Panel:
         except Exception:
             projects = []
         return {'settings': s, 'projects': projects, 'tiers': store.TIERS,
-                'departments': {k: {'name': v[0], 'mission': v[1], 'tier': v[3]} for k, v in store.DEPARTMENTS.items()}}
+                'departments': {k: {'name': v[0], 'mission': v[1], 'tier': v[3]} for k, v in store.depts(self.db).items()}}
 
     # ---- background run ----
     def run_async(self, ident):
@@ -180,6 +210,8 @@ def make_handler(panel):
                     '/api/questions': lambda: projects.open_questions(panel.db),
                     '/api/routing': lambda: router.routing_table(panel.db),
                     '/api/lessons': lambda: store.lessons(path=panel.db),
+                    '/api/org': panel.org_view,
+                    '/api/board': panel.board_view,
                 })
                 if p not in routes:
                     return self._err(404, 'Yok')
@@ -256,6 +288,27 @@ def make_handler(panel):
                 if resume:
                     panel.produce_async(pid)
                 return {'product': pid, 'resumed': resume}
+            if p == '/api/board/message':
+                return board.message(str(b.get('text', '')), db, ai=panel.ai)
+            m = re.fullmatch(r'/api/board/proposal/(B-[0-9a-f]{9})/(approve|reject)', p)
+            if m:
+                return (board.approve if m.group(2) == 'approve' else board.reject)(m.group(1), db)
+            if p == '/api/board/suggestion':
+                return board.propose_suggestion(_int(b, 'index', -1), db)
+            if p == '/api/org/apply':
+                ops = b.get('ops')
+                vid = org.apply(ops, note=str(b.get('note', 'Patron doğrudan düzenledi'))[:200], actor='patron', path=db)
+                return {'version': vid}
+            if p == '/api/org/rollback':
+                return org.rollback(_int(b, 'version', 0), db)
+            if p == '/api/core':
+                return board.core_create(str(b.get('goal', '')), db)
+            if p == '/api/core/rollback':
+                return board.core_rollback(db)
+            m = re.fullmatch(r'/api/core/(C-[0-9a-f]{9})/(kod|test|incele|kur)', p)
+            if m:
+                panel.core_async(*m.groups())
+                return {'started': m.group(0)}
             if p == '/api/research':
                 return research.research(str(b.get('focus', '')), str(b.get('topic', '')), db, ai=panel.ai)
             m = re.fullmatch(r'/api/lesson/(D-[0-9a-f]{9})/delete', p)

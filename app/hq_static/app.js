@@ -258,6 +258,73 @@
     return onQuestion(ev);
   }
 
+
+  /* ---------- Yönetim Kurulu ---------- */
+  let ORG = null;
+  const HOOKNAME = { '': 'Doğrudan iş', plan_sonrasi: 'Plan sonrası', paket_sonrasi: 'Paket sonrası', teslim_oncesi: 'Teslim öncesi' };
+  const MODENAME = { '': '-', rapor: 'Rapor', denetim: 'Denetim (PASS/FAIL)', kod: 'Kod' };
+  const PSTATUS = { bekliyor: 'Onay bekliyor', uygulandi: 'Uygulandı', reddedildi: 'Reddedildi' };
+  const CORESTATE = { hazirlandi: 'Hazırlandı', kod_hazir: 'Kod yazıldı', test_gecti: 'Test geçti', onaya_hazir: 'Kuruluma hazır', reddedildi: 'Reddedildi', kuruldu: 'Kuruldu' };
+  function renderBoard(b, o) {
+    ORG = o;
+    $('#gmy-log').innerHTML = b.chat.length ? b.chat.map((m) => `<div class="msg ${m.role === 'patron' ? 'patron' : ''}"><span class="who">${m.role === 'patron' ? 'Sen' : 'Genel Müdür Yardımcısı'}</span>${esc(m.text)}</div>`).join('') :
+      '<div class="msg"><span class="who">Genel Müdür Yardımcısı</span>Merhaba. Şirkette ne değiştirmek istersin? Departman kurabilir, kapatabilir, görevleri ve iş akışını yeniden düzenleyebilirim. Her öneri senin onayınla uygulanır.</div>';
+    const log = $('#gmy-log'); log.scrollTop = log.scrollHeight;
+    const pend = b.proposals.filter((p) => p.status === 'bekliyor');
+    const past = b.proposals.filter((p) => p.status !== 'bekliyor').slice(0, 5);
+    $('#proposals').innerHTML = (pend.length ? pend.map((p) => `<div class="job ask"><div class="job-main">
+        <div class="dept-tag">${p.source === 'k0' ? 'Sağlık analizi önerisi' : 'Genel Müdür Yardımcısı önerisi'}</div>
+        <div class="job-title">${esc(p.summary)}</div>
+        <ul class="small">${p.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+        ${p.impact ? `<div class="small muted">Etki: ${esc(p.impact)}</div>` : ''}
+        ${p.code_request ? `<div class="small">Kod değişikliği gerekiyor: ${esc(p.code_request)}</div>` : ''}
+        ${p.error ? `<div class="small">Uygulanamadı: ${esc(p.error)}</div>` : ''}
+        <div class="job-actions"><button class="btn btn-line" data-prop="${p.id}" data-pa="reject">Reddet</button>
+          ${p.ops.length ? `<button class="btn btn-teal" data-prop="${p.id}" data-pa="approve">Onayla ve uygula</button>` : ''}
+          ${p.code_request ? `<button class="btn btn-dark" data-coreprop="${esc(p.code_request)}" data-prop="${p.id}">Çekirdek talebi başlat</button>` : ''}</div>
+      </div></div>`).join('') : '<div class="empty">Bekleyen öneri yok.</div>') +
+      (past.length ? `<div class="small muted">Son kararlar: ${past.map((p) => `${esc(p.summary)} (${PSTATUS[p.status]})`).join(' · ')}</div>` : '');
+    const h = b.health;
+    $('#health-summary').innerHTML = `<div>Bu hafta <b>${h.summary.week_calls}/${h.summary.week_limit}</b> çağrı · ${h.summary.departments} departman · takılan paket ${h.summary.stuck_packages}</div>
+      <div class="small muted">Kurulu AI: ${esc(h.summary.installed_ai.join(', ') || 'yok')}</div>` + h.notes.map((n) => `<div class="small">• ${esc(n)}</div>`).join('');
+    $('#health-suggestions').innerHTML = h.suggestions.length ? h.suggestions.map((x, i) => `<div class="sugg"><span>${esc(x.text)}</span><button class="btn btn-line" data-sugg="${i}" type="button">Öneri yap</button></div>`).join('') : '<div class="small muted">Şu an veriye dayalı bir öneri yok. Projeler çalıştıkça burası dolacak.</div>';
+    $('#health-body').innerHTML = h.departments.map((r) => `<tr><td>${esc(r.name)}</td><td>${r.week_calls}/${r.budget}</td><td>${r.first_pass == null ? '-' : '%' + r.first_pass}</td><td>${r.stuck}</td><td>${r.lessons}</td></tr>`).join('');
+    $('#org-list').innerHTML = Object.values(o.departments).map((d) => `<div class="dept${d.active ? '' : ' off'}"><div class="dept-head"><span class="dept-name">${esc(d.name)}</span>
+      <span class="chip">${d.active ? (d.required ? 'Çekirdek' : 'Aktif') : 'Kapalı'}</span></div>
+      <div class="dept-cur">${esc(d.mission)}</div>
+      <div class="dept-meta">${esc(d.tier)} · bütçe ${d.budget} · ${HOOKNAME[d.hook]}${d.mode ? ' / ' + MODENAME[d.mode] : ''}</div>
+      <button class="btn btn-line" type="button" data-edit="${d.key}">Düzenle</button></div>`).join('');
+    const w = o.workflow, makers = Object.values(o.departments).filter((d) => d.active && !d.hook && ['K1', 'K2'].includes(d.tier));
+    $('#wf-fixes').value = w.max_fixes; $('#wf-packages').value = w.max_packages; $('#wf-reviews').value = String(w.reviews); $('#wf-lessons').value = w.lessons_per_prompt;
+    const opt = (sel) => makers.map((d) => `<option value="${d.key}"${d.key === sel ? ' selected' : ''}>${esc(d.name)}</option>`).join('');
+    $('#wf-oyun').innerHTML = opt(w.kind_dept.oyun); $('#wf-uyg').innerHTML = opt(w.kind_dept.uygulama);
+    $('#versions').innerHTML = o.versions.length ? o.versions.map((v) => `<div class="ver${v.rolled_back ? ' off' : ''}"><div><b>V${v.id}</b> · ${esc(v.at.slice(0, 16).replace('T', ' '))} · ${esc(v.note || '')}${v.rolled_back ? ' (geri alındı)' : ''}</div>
+      <ul class="small">${v.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+      ${v.rolled_back ? '' : `<button class="btn btn-link" data-rollback="${v.id}" type="button">Bu değişiklikten öncesine dön</button>`}</div>`).join('') : '<div class="empty">Henüz değişiklik yok.</div>';
+    const rq = b.core_requirements;
+    $('#core-req').innerHTML = [['codex', 'Codex CLI'], ['claude', 'Claude Code'], ['gemini', 'Gemini CLI'], ['docker', 'Docker'], ['test_image', 'Test imajı (PARDEX_TEST_IMAGE)']]
+      .map(([k, l]) => `<span class="chip ${rq[k] ? 'calisiyor' : 'onay'}">${rq[k] ? '✓' : '✗'} ${l}</span>`).join('');
+    const cs = b.core_state.running;
+    $('#core-list').innerHTML = b.core.map((c) => `<div class="pkg"><div class="pkg-head"><b>${esc(c.goal.slice(0, 90))}</b><span class="chip">${esc(CORESTATE[c.state] || c.state)}</span></div>
+      ${c.note ? `<div class="small">${esc(c.note)}</div>` : ''}
+      <div class="job-actions">${[['kod', 'Kodu yazdır'], ['test', 'Test et'], ['incele', 'İki AI denetimi'], ['kur', 'Kur']].map(([st, l]) => `<button class="btn ${st === 'kur' ? 'btn-teal' : 'btn-line'}" type="button" data-core="${c.id}" data-step="${st}"${cs || (st === 'kur' && !c.ready) ? ' disabled' : ''}>${l}</button>`).join('')}</div></div>`).join('') +
+      (cs ? '<div class="small muted">Çekirdek adımı çalışıyor…</div>' : '') + (b.core_state.error ? `<div class="small">Son hata: ${esc(b.core_state.error)}</div>` : '');
+    if (cs) startPoll();
+  }
+  function openDept(key) {
+    const d = key ? ORG.departments[key] : { key: '', name: '', mission: '', prompt: '', tier: 'K1', budget: 4, hook: '', mode: '', active: 1, required: 0 };
+    $('#dept-title').textContent = key ? d.name + ' — düzenle' : 'Yeni departman';
+    $('#d-key').value = d.key; $('#d-key').disabled = !!key;
+    $('#d-name').value = d.name; $('#d-mission').value = d.mission; $('#d-prompt').value = d.prompt; $('#d-tier').value = d.tier; $('#d-budget').value = d.budget;
+    $('#d-hook').innerHTML = Object.keys(ORG.hooks).map((h) => `<option value="${h}"${h === d.hook ? ' selected' : ''}>${esc(ORG.hooks[h])}</option>`).join('');
+    $('#d-hook').disabled = !!d.required;
+    const modes = () => { const h = $('#d-hook').value; $('#d-mode').innerHTML = ORG.modes[h].map((m) => `<option value="${m}"${m === d.mode ? ' selected' : ''}>${MODENAME[m]}</option>`).join(''); };
+    $('#d-hook').onchange = modes; modes();
+    $('#d-active').checked = !!d.active; $('#d-active').disabled = !!d.required;
+    $('#dept-form').dataset.key = key || '';
+    $('#dept-dialog').showModal();
+  }
+
   /* ---------- routing ---------- */
   function renderRouting(r) {
     $('#routing-installed').textContent = 'Kurulu araçlar: ' + (r.installed.length ? r.installed.join(', ') : 'yok — Claude Code / Codex / Gemini CLI kur ve giriş yap') + '. Sürüm numarası yazılmaz; takma adlar (sonnet, opus, haiku, flash, pro) aboneliğindeki en güncel modele gider.';
@@ -278,6 +345,7 @@
     if (VIEW === 'ideas') renderIdeas(await api('/api/ideas'));
     if (VIEW === 'depts') renderDepts(DASH);
     if (VIEW === 'finance') renderFinance(DASH, await api('/api/ledger'));
+    if (VIEW === 'board') renderBoard(await api('/api/board'), await api('/api/org'));
     if (VIEW === 'settings') { META = await api('/api/settings'); renderSettings(META, await api('/api/events')); renderRouting(await api('/api/routing')); }
     if (!DASH.run.running && !DASH.production.running && poll) { clearInterval(poll); poll = null; }
   }
@@ -323,6 +391,67 @@
         r.rejected.map((x) => `<div class="small muted">Elendi: ${esc(x.title)} — ${esc(x.reason)}</div>`).join('');
       $('#rs-status').textContent = ''; refresh();
     } catch (err) { $('#rs-status').textContent = ''; toast(err.message, true); }
+  });
+
+  $('#gmy-form').addEventListener('submit', async (e) => {
+    e.preventDefault(); const ta = $('#gmy-text'); const text = ta.value.trim(); if (!text) return;
+    const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Düşünüyor…';
+    try { const r = await api('/api/board/message', { text }); ta.value = ''; if (r.proposal) toast('Öneri hazır — onayını bekliyor'); }
+    catch (err) { toast(err.message, true); }
+    btn.disabled = false; btn.textContent = 'Gönder (1 çağrı)'; refresh();
+  });
+  $('#view-board').addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.coreprop) {
+      if (!confirm('Çekirdek değişiklik talebi oluşturulsun mu? Kod, şirket yazılımının bir kopyasında yazılır; sen kurmadıkça hiçbir şey değişmez.')) return;
+      await act(() => api('/api/core', { goal: b.dataset.coreprop }), 'Çekirdek talebi oluşturuldu');
+      return act(() => api(`/api/board/proposal/${b.dataset.prop}/reject`, {}), null);
+    }
+    if (b.dataset.pa) {
+      if (b.dataset.pa === 'approve' && !confirm('Bu değişiklikler uygulanacak (sürüm olarak kaydedilir, geri alınabilir). Onaylıyor musun?')) return;
+      return act(() => api(`/api/board/proposal/${b.dataset.prop}/${b.dataset.pa}`, {}), b.dataset.pa === 'approve' ? 'Uygulandı' : 'Reddedildi').then(() => { META = null; });
+    }
+    if (b.dataset.sugg) return act(() => api('/api/board/suggestion', { index: Number(b.dataset.sugg) }), 'Öneri onay masasına eklendi');
+    if (b.dataset.rollback) {
+      if (!confirm(`V${b.dataset.rollback} ve sonrasındaki bütün değişiklikler geri alınacak. Emin misin?`)) return;
+      return act(() => api('/api/org/rollback', { version: Number(b.dataset.rollback) }), 'Geri alındı').then(() => { META = null; });
+    }
+    if (b.dataset.edit) return openDept(b.dataset.edit);
+    if (b.id === 'new-dept') return openDept('');
+    if (b.dataset.core) {
+      const step = b.dataset.step;
+      const msg = { kod: 'Codex, şirket yazılımının kopyasında kodu yazacak (1 çağrı).', test: 'Kopya, izole Docker testinden geçirilecek.', incele: 'Claude ve Gemini değişikliği bağımsız denetleyecek (2 çağrı).', kur: 'Onaylı değişiklik şirket yazılımına kurulacak; yedek alınır, geri alınabilir. Sonra paneli yeniden aç.' }[step];
+      if (!confirm(msg + ' Devam?')) return;
+      await act(() => api(`/api/core/${b.dataset.core}/${step}`, {}), 'Başladı'); startPoll(); return;
+    }
+    if (b.id === 'core-rollback') { if (confirm('Son çekirdek kurulumu geri alınsın mı?')) act(() => api('/api/core/rollback', {}), 'Geri alındı; paneli yeniden aç'); }
+  });
+  $('#core-form').addEventListener('submit', (e) => { e.preventDefault(); const g = $('#core-goal').value.trim(); if (g.length < 20) return toast('En az 20 karakterle açıkla', true);
+    act(() => api('/api/core', { goal: g }), 'Çekirdek talebi oluşturuldu').then(() => { $('#core-goal').value = ''; }); });
+  $('#wf-form').addEventListener('submit', (e) => {
+    e.preventDefault(); const w = ORG.workflow, ops = [];
+    [['max_fixes', '#wf-fixes'], ['max_packages', '#wf-packages'], ['reviews', '#wf-reviews'], ['lessons_per_prompt', '#wf-lessons']].forEach(([f, sel]) => {
+      const v = Number($(sel).value); if (v !== w[f]) ops.push({ op: 'set_workflow', field: f, value: v }); });
+    const kd = { oyun: $('#wf-oyun').value, uygulama: $('#wf-uyg').value };
+    if (kd.oyun !== w.kind_dept.oyun || kd.uygulama !== w.kind_dept.uygulama) ops.push({ op: 'set_workflow', field: 'kind_dept', value: kd });
+    if (!ops.length) return toast('Değişiklik yok');
+    act(() => api('/api/org/apply', { ops, note: 'İş akışı düzenlendi' }), 'İş akışı güncellendi');
+  });
+  $('#dept-close').addEventListener('click', () => $('#dept-dialog').close());
+  $('#dept-form').addEventListener('submit', (e) => {
+    e.preventDefault(); const key = e.target.dataset.key, d = key ? ORG.departments[key] : null, ops = [];
+    const f = { name: $('#d-name').value.trim(), mission: $('#d-mission').value.trim(), prompt: $('#d-prompt').value.trim(), tier: $('#d-tier').value, hook: $('#d-hook').value, mode: $('#d-mode').value };
+    const budget = Number($('#d-budget').value);
+    if (!key) ops.push(Object.assign({ op: 'add_department', key: $('#d-key').value.trim(), budget }, f));
+    else {
+      const ch = {}; Object.entries(f).forEach(([k, v]) => { if (v !== d[k]) ch[k] = v; });
+      if (d.required) { delete ch.hook; delete ch.mode; }
+      if (Object.keys(ch).length) ops.push(Object.assign({ op: 'update_department', key }, ch));
+      if (budget !== d.budget) ops.push({ op: 'set_budget', key, budget });
+      if (!d.required && $('#d-active').checked !== !!d.active) ops.push({ op: $('#d-active').checked ? 'activate_department' : 'deactivate_department', key });
+    }
+    if (!ops.length) { $('#dept-dialog').close(); return; }
+    act(() => api('/api/org/apply', { ops, note: key ? f.name + ' düzenlendi' : 'Yeni departman: ' + f.name }), 'Kaydedildi (sürüm)').then((r) => { if (r) { $('#dept-dialog').close(); META = null; } });
   });
   $('#dept-full').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-report]'); if (!b) return;

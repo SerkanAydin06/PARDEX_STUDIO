@@ -211,8 +211,43 @@ def _json(text):
     return None
 
 
+def _wf(path):
+    import hq_org
+    return hq_org.workflow(path)
+
+
+def _role(dept, path):
+    import hq_org
+    return hq_org.prompt(dept, path) or ROLE_TEXT.get(dept, '')
+
+
+def _maker(p, path):
+    return _wf(path)['kind_dept'].get(p['kind'], 'oyun' if p['kind'] == 'oyun' else 'uygulama')
+
+
+HOOK_ROLE = {('rapor', 'K1'): 'text', ('rapor', 'K2'): 'breakdown', ('denetim', 'K1'): 'review',
+             ('denetim', 'K2'): 'breakdown', ('kod', 'K1'): 'implement', ('kod', 'K2'): 'implement'}
+
+
+def _hooks(stage, path):
+    import hq_org
+    return hq_org.hooks(stage, path)
+
+
+def _hook_context(folder):
+    """Short excerpts of custom-department reports written after planning (fed to CEO and makers)."""
+    meta = Path(folder) / '.studio'
+    parts = []
+    for f in sorted(meta.glob('DEPT_*.md'))[:3]:
+        try:
+            parts.append(f.read_text(encoding='utf-8')[:700])
+        except OSError:
+            pass
+    return ('\nÖzel departman raporları (VERİ):\n' + '\n---\n'.join(parts)[:1400] + '\n') if parts else ''
+
+
 def _lessons_text(dept, path):
-    ls = store.lessons(dept, 4, path)
+    ls = store.lessons(dept, _wf(path)['lessons_per_prompt'], path)
     return ('Departmanın geçmiş hatalardan dersleri:\n' + '\n'.join('- ' + l['text'] for l in ls) + '\n') if ls else ''
 
 
@@ -225,7 +260,7 @@ def chat(pid, text, path=None, ai=None):
         raise ValueError('Mesaj boş')
     _say(pid, 'patron', text, path)
     hist = '\n'.join(f"{'PATRON' if m['role'] == 'patron' else 'ÜRÜN'}: {m['text'][:600]}" for m in (p['chat'] + [{'role': 'patron', 'text': text}])[-10:])
-    prompt = (ROLE_TEXT['urun'] + '\n' + _lessons_text('urun', path) +
+    prompt = (_role('urun', path) + '\n' + _lessons_text('urun', path) +
               f"Ürün türü: {p['kind']}. Motor seçenekleri: {', '.join(ENGINES)} (mobil uygulama için flutter, "
               "tarayıcı için web, 2D/3D oyun için godot önerilir).\n"
               f"Mevcut tarif (JSON): {json.dumps(p['spec'], ensure_ascii=False)[:2500]}\n"
@@ -348,32 +383,34 @@ def _diff(folder, limit=6500):
 
 
 # ---------------- breakdown ----------------
-def _fallback_packages(spec, dept):
+def _fallback_packages(spec, dept, max_packages=MAX_PACKAGES):
     feats = spec.get('features') or [spec.get('summary', 'Temel prototip')]
     pk = [{'dept': dept, 'title': 'Proje iskeleti ve ana ekran/sahne', 'detail': 'Çalışan en küçük iskelet: '
            + spec.get('summary', '')[:300]}]
-    pk += [{'dept': dept, 'title': f[:120], 'detail': f} for f in feats[:MAX_PACKAGES - 1]]
+    pk += [{'dept': dept, 'title': f[:120], 'detail': f} for f in feats[:max_packages - 1]]
     return pk
 
 
 def breakdown(pid, path=None, ai=None):
     p = get(pid, path)
-    dept = 'oyun' if p['kind'] == 'oyun' else 'uygulama'
+    dept = _maker(p, path)
+    mx = _wf(path)['max_packages']
     role = 'architect' if p['complexity'] == 'Yüksek' else 'breakdown'
-    prompt = (ROLE_TEXT['ceo'] + '\n' + _lessons_text('ceo', path) +
+    prompt = (_role('ceo', path) + '\n' + _lessons_text('ceo', path) +
+              (_hook_context(p['folder']) if p['folder'] else '') +
               f"Tarif: {json.dumps(p['spec'], ensure_ascii=False)[:3000]}\n"
-              f"En fazla {MAX_PACKAGES} paket. İlk paket çalışan iskelet olsun. Her paket kabul ölçütlerinden en az birine katkı versin. "
+              f"En fazla {mx} paket. İlk paket çalışan iskelet olsun. Her paket kabul ölçütlerinden en az birine katkı versin. "
               'Salt-okunur çalış, dosya değiştirme. YALNIZCA JSON: {"packages":[{"title":"en fazla 100 karakter",'
               '"detail":"ne yapılacak, hangi dosyalar, nasıl test edilir (en fazla 600 karakter)"}]}')
     res = (ai or router.call)(role, prompt, p['folder'] or _scratch(), 'ceo', path=path)
     data = _json(res['output']) if res['ok'] else None
     items = []
-    for x in (data or {}).get('packages', [])[:MAX_PACKAGES]:
+    for x in (data or {}).get('packages', [])[:mx]:
         if isinstance(x, dict) and len(str(x.get('title', ''))) >= 4:
             items.append({'dept': dept, 'title': _clean(x['title'], 120), 'detail': _clean(x.get('detail', ''), 700)})
     source = f"{res['provider']} {res['model']}" if items else 'K0 yedek plan'
     if not items:
-        items = _fallback_packages(p['spec'], dept)
+        items = _fallback_packages(p['spec'], dept, mx)
     with _Tx(path) as db:
         db.execute('DELETE FROM packages WHERE product_id=? AND status="bekliyor"', (pid,))
         start = db.execute('SELECT COALESCE(MAX(seq),0) FROM packages WHERE product_id=?', (pid,)).fetchone()[0]
@@ -381,15 +418,18 @@ def breakdown(pid, path=None, ai=None):
             db.execute('INSERT INTO packages VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        ('K-' + uuid.uuid4().hex[:9], pid, start + i, it['dept'], it['title'], it['detail'] or it['title'],
                         'bekliyor', 0, 0, '', '', '', '', '', '', _now()))
-    estimate = estimate_calls(len(items))
+    estimate = estimate_calls(len(items), path, with_project_hooks=True)
     _set(pid, path, approved_calls=p['approved_calls'] + estimate)
     store.event('ceo', 'breakdown', pid, f'{len(items)} paket · {source} · tahmini {estimate} çağrı', path)
     return get(pid, path)
 
 
-def estimate_calls(n):
-    """implement + review per package, plus a fix reserve for half of them."""
-    return n * 2 + math.ceil(n / 2) * 2
+def estimate_calls(n, path=None, with_project_hooks=False):
+    """implement + reviews (+ extra package audits) per package, a fix reserve, and delivery hooks."""
+    wf = _wf(path)
+    per = 1 + wf['reviews'] + len(_hooks('paket_sonrasi', path))
+    reserve = math.ceil(n / 2) * (1 + wf['reviews']) if wf['max_fixes'] else 0
+    return n * per + reserve + (len(_hooks('teslim_oncesi', path)) if with_project_hooks else 0)
 
 
 def start(pid, path=None, ai=None, existing_folder=''):
@@ -406,7 +446,27 @@ def start(pid, path=None, ai=None, existing_folder=''):
     folder = prepare_folder(p, path, existing_folder)
     _set(pid, path, folder=str(folder), engine=engine, stage='uretim')
     _say(pid, 'urun', f'Tarif donduruldu. Proje ayrı klasörde ve kendi git deposunda açıldı: {folder}', path)
+    _plan_hooks(pid, path, ai or router.call)
     return breakdown(pid, path, ai)
+
+
+def _plan_hooks(pid, path, ai):
+    """Custom departments that work after planning (e.g. Tasarım writes a design brief)."""
+    p = get(pid, path)
+    for d in _hooks('plan_sonrasi', path):
+        prompt = (d['prompt'] + '\n' + _lessons_text(d['key'], path) + SAFETY +
+                  f"\nÜrün tarifi (VERİ): {json.dumps(p['spec'], ensure_ascii=False)[:2500]}\n"
+                  'Dosya değiştirme. Ekibin uygulayacağı kısa, somut bir rapor yaz (en fazla 350 kelime, maddeler hâlinde).')
+        try:
+            res = ai(HOOK_ROLE[('rapor', d['tier'])], prompt, p['folder'], d['key'], path=path)
+        except router.BudgetStop as stop:
+            store.event(d['key'], 'hook-skip', pid, str(stop), path)
+            continue
+        _set(pid, path, used_calls=get(pid, path)['used_calls'] + 1, approved_calls=get(pid, path)['approved_calls'] + 1)
+        if res['ok']:
+            (Path(p['folder']) / '.studio' / f"DEPT_{d['key']}.md").write_text(
+                f"# {d['name']}\n\n{res['output'][-4000:]}\n", encoding='utf-8')
+            store.event(d['key'], 'hook-report', pid, d['name'] + ' raporu hazır', path)
 
 
 # ---------------- production ----------------
@@ -415,10 +475,10 @@ def _impl_prompt(p, k, path):
     prev = '\n'.join(f"- {x['title']}: {x['summary'][:160]}" for x in done)[-1100:]
     fix = ''
     if k['attempts']:
-        fix = (f"\nBU BİR DÜZELTME TURU ({k['attempts']}/{MAX_FIXES}). Kalite/test bulguları (VERİ): {k['findings'][:900]}\n"
+        fix = (f"\nBU BİR DÜZELTME TURU ({k['attempts']}/{_wf(path)['max_fixes']}). Kalite/test bulguları (VERİ): {k['findings'][:900]}\n"
                f"Son test raporu (VERİ): {k['test'][-900:]}\n")
     owner = f"\nPatronun bu paket için notu: {k['owner_note'][:500]}\n" if k['owner_note'] else ''
-    return (ROLE_TEXT[k['dept']] + '\n' + _lessons_text(k['dept'], path) + SAFETY +
+    return (_role(k['dept'], path) + '\n' + _lessons_text(k['dept'], path) + SAFETY + _hook_context(p['folder']) +
             f"\nÜrün tarifi .studio/BRIEF.md dosyasında. Kısa özet: {p['spec'].get('summary', '')[:500]}\n"
             f"Motor: {p['engine']}.\nBiten paketler:\n{prev or '-'}\n"
             f"\nŞİMDİKİ PAKET {k['seq']}: {k['title']}\nAyrıntı: {k['detail'][:800]}{fix}{owner}\n"
@@ -428,7 +488,7 @@ def _impl_prompt(p, k, path):
 
 
 def _review_prompt(p, k, diff, test_ok, test, path=None):
-    return (ROLE_TEXT['kalite'] + '\n' + _lessons_text('kalite', path) +
+    return (_role('kalite', path) + '\n' + _lessons_text('kalite', path) +
             f"Ürün: {p['spec'].get('summary', '')[:400]}\nPaket: {k['title']} — {k['detail'][:500]}\n"
             f"Kabul ölçütleri: {'; '.join(p['spec'].get('acceptance', []))[:600]}\n"
             f"Otomatik test: {'GEÇTİ' if test_ok else ('YAPILAMADI' if test_ok is None else 'BAŞARISIZ')}\n{test[-800:]}\n"
@@ -483,7 +543,7 @@ def _run(pid, path, ai, tester):
         p = get(pid, path)
         k = next((x for x in p['packages'] if x['status'] in ('bekliyor', 'duzeltme', 'calisiyor')), None)
         if not k:
-            return _deliver(pid, path, tester)
+            return _deliver(pid, path, tester, ai)
         if p['used_calls'] + 2 > p['approved_calls']:
             ask(pid, 'budget', f"Onaylanan çağrı bütçesi doldu ({p['used_calls']}/{p['approved_calls']}). "
                 f"Kalan paket: {sum(x['status'] in ('bekliyor', 'duzeltme') for x in p['packages'])}.",
@@ -492,7 +552,8 @@ def _run(pid, path, ai, tester):
         _pkg(k['id'], path, status='calisiyor')
         role = 'fix' if k['attempts'] else 'implement'
         avoid = ()
-        if k['attempts'] >= MAX_FIXES and k['provider']:
+        max_fixes = _wf(path)['max_fixes']
+        if k['attempts'] and k['attempts'] >= max_fixes and k['provider']:
             avoid = (k['provider'],)  # second fix: let a different team member try
         if k['strong']:
             role = 'fix_strong'
@@ -530,6 +591,13 @@ def _run(pid, path, ai, tester):
             verdict = _qa(rev['output']) if rev['ok'] else None
             if verdict is None:
                 verdict = ('FAIL', 'Kalite incelemesi geçerli PASS/FAIL formatında dönmedi')
+            try:
+                verdict = _extra_checks(p, k, folder, verdict, test_state, test, res['provider'], rev['provider'], ai, path)
+            except router.BudgetStop as stop:
+                _pkg(k['id'], path, status='duzeltme', test=test)
+                ask(pid, 'budget', f'Ek denetimde durdu: {stop}', ['Bütçeyi artır ve devam et',
+                    'Burada durdur, olanı teslim et'], k['id'], path)
+                return get(pid, path)
             if test_state is False:
                 verdict = ('FAIL', (verdict[1] if verdict[0] == 'FAIL' else 'Otomatik test başarısız') [:240])
         summary = _line(res['output'], 'PARDEX_DONE') or 'Paket tamamlandı'
@@ -541,7 +609,7 @@ def _run(pid, path, ai, tester):
             store.event(k['dept'], 'package-done', k['id'], k['title'], path)
             continue
         attempts = k['attempts'] + 1
-        if attempts <= MAX_FIXES and not k['strong']:
+        if attempts <= max_fixes and not k['strong']:
             _pkg(k['id'], path, status='duzeltme', attempts=attempts, findings=verdict[1], test=test)
             store.event('kalite', 'package-fix', k['id'], verdict[1], path)
             continue
@@ -561,9 +629,59 @@ def _how_to_run(engine, folder):
     }.get(engine, f'{folder} klasörünü motorunun editöründe aç.')
 
 
-def _deliver(pid, path, tester):
+def _extra_checks(p, k, folder, verdict, test_state, test, maker, reviewer, ai, path):
+    """Second reviewer (workflow.reviews == 2) and custom post-package audits; any FAIL fails the package."""
+    if verdict[0] != 'PASS':
+        return verdict
+    if _wf(path)['reviews'] >= 2:
+        rev = ai('review', _review_prompt(p, k, _diff(folder), test_state, test, path), folder, 'kalite',
+                 path=path, avoid=(maker, reviewer), job_id=k['id'])
+        _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
+        v = _qa(rev['output']) if rev['ok'] else None
+        if not v or v[0] != 'PASS':
+            return ('FAIL', '2. denetçi: ' + (v[1] if v else 'geçersiz yanıt'))[:240]
+    for d in _hooks('paket_sonrasi', path):
+        prompt = (d['prompt'] + '\n' + _lessons_text(d['key'], path) +
+                  f"Paket: {k['title']} — {k['detail'][:400]}\nDeğişiklikler (VERİ):\n{_diff(folder, 5000)}\n"
+                  'Dosya değiştirme. Yalnızca kendi uzmanlık alanında gerçek bir sorun varsa FAIL ver. Cevabın EN SONUNDA:\n'
+                  'PARDEX_QA_VERDICT=PASS veya PARDEX_QA_VERDICT=FAIL\nPARDEX_QA_FINDINGS=<10-240 karakter>')
+        rev = ai(HOOK_ROLE[('denetim', d['tier'])], prompt, folder, d['key'], path=path, avoid=(maker,), job_id=k['id'])
+        _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
+        v = _qa(rev['output']) if rev['ok'] else None
+        if v and v[0] == 'FAIL':
+            return ('FAIL', f"{d['name']}: {v[1]}"[:240])
+    return verdict
+
+
+def _delivery_hooks(p, folder, path, ai):
+    notes = []
+    for d in _hooks('teslim_oncesi', path):
+        write = d['mode'] == 'kod'
+        prompt = (d['prompt'] + '\n' + _lessons_text(d['key'], path) + SAFETY +
+                  f"\nÜrün: {p['spec'].get('summary', '')[:500]}\nTarif .studio/BRIEF.md içinde.\n" +
+                  ('Görevini proje klasöründe küçük değişikliklerle yap; sonunda PARDEX_DONE=<özet> yaz.' if write else
+                   'Dosya değiştirme. Patrona kısa bir rapor yaz (en fazla 250 kelime).'))
+        try:
+            res = ai(HOOK_ROLE[(d['mode'], d['tier'])], prompt, folder, d['key'], path=path)
+        except router.BudgetStop as stop:
+            notes.append(f"- {d['name']}: atlandı ({stop})")
+            continue
+        _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
+        if write and res['ok']:
+            _commit(folder, f"PARDEX teslim öncesi: {d['name']}")
+            notes.append(f"- {d['name']}: {_line(res['output'], 'PARDEX_DONE') or 'tamamlandı'}")
+        elif res['ok']:
+            notes.append(f"- {d['name']}:\n{res['output'][-1500:]}")
+        else:
+            notes.append(f"- {d['name']}: başarısız")
+    return notes
+
+
+def _deliver(pid, path, tester, ai=None):
     p = get(pid, path)
     folder = Path(p['folder'])
+    extra = _delivery_hooks(p, folder, path, ai or router.call)
+    p = get(pid, path)
     ok, test = tester(folder)
     done = [k for k in p['packages'] if k['status'] == 'tamam']
     skipped = [k for k in p['packages'] if k['status'] in ('atlandi', 'takildi')]
@@ -575,6 +693,8 @@ def _deliver(pid, path, tester):
              for k in done]
     if skipped:
         lines += ['', '## Eksik kalanlar'] + [f"- {k['title']}: {k['findings'][:160]}" for k in skipped]
+    if extra:
+        lines += ['', '## Teslim öncesi departmanlar'] + extra
     lines += ['', '## Senin kontrol etmen gerekenler', '- Oynanış/görünüş ve kabul ölçütleri:'] + \
              ['  - ' + a for a in p['spec'].get('acceptance', [])]
     report = '\n'.join(lines)
@@ -599,7 +719,7 @@ def answer(qid, answer_text, path=None):
     if q['kind'] == 'budget':
         if a.startswith('Bütçeyi artır'):
             left = sum(x['status'] in ('bekliyor', 'duzeltme') for x in p['packages'])
-            _set(pid, path, approved_calls=p['approved_calls'] + max(4, estimate_calls(left)))
+            _set(pid, path, approved_calls=p['approved_calls'] + max(4, estimate_calls(left, path, True)))
         else:
             for k in p['packages']:
                 if k['status'] in ('bekliyor', 'duzeltme'):
@@ -648,13 +768,13 @@ def request_changes(pid, note, path=None):
     note = _clean(note, 800)
     if len(note) < 6:
         raise ValueError('Ne değişmeli? Biraz daha açık yaz')
-    dept = 'oyun' if p['kind'] == 'oyun' else 'uygulama'
+    dept = _maker(p, path)
     seq = max([k['seq'] for k in p['packages']] or [0]) + 1
     with _Tx(path) as db:
         db.execute('INSERT INTO packages VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    ('K-' + uuid.uuid4().hex[:9], pid, seq, dept, 'Patron düzeltmesi: ' + note[:90], note,
                     'bekliyor', 0, 0, '', '', '', note, '', '', _now()))
-    _set(pid, path, stage='uretim', approved_calls=p['approved_calls'] + estimate_calls(1))
+    _set(pid, path, stage='uretim', approved_calls=p['approved_calls'] + estimate_calls(1, path, True))
     store.add_lesson(dept, 'Patron teslimde düzeltme istedi: ' + note[:180], 'patron', path)
     return get(pid, path)
 
