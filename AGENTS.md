@@ -67,3 +67,9 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - AI vardiyası ancak açık sahip onayıyla ve önceden onaylanmış kesin görev kimlikleriyle başlar. Sıradaki görev değişirse dur; onay, otomatik retry, ödeme veya yayınlama yapma.
 - Varsayılan iki, teknik üst sınır üç CLI çağrısı ve doksan dakika. Proje başına bir görev; sonuçlar ayrıca kullanıcı kabulü bekler.
 - Native abonelik CLI işleri güvenli OS sandbox sayılmaz; sıkı izolasyon açıksa engellenir.
+
+
+### 2H — Tek seferlik, kontrollü vardiyalar
+- Zamanlayıcı yalnızca ayrı ayrı onaylı 1–2 görevin tam kimliğini ve dar zaman penceresini saklar; arka plan servisi değildir.
+- Native zamanlanmış çalışma varsayılan kapalıdır; plan başına risk kabulü + CLI --execute + ortam opt-in gerekir. Sıkı mod host CLI'yi her zaman engeller.
+- Onaysız yeniden deneme, ödeme, yayın, main merge, görev kabulü veya izole çalışma iddiası yoktur.
