@@ -38,3 +38,10 @@ python -m compileall -q app tests
 ```
 
 `tests/test_project_delivery.py` gerçek geçici Godot dosyaları kullanır; sadece AI çağrısı sahte olup güvenlik, kopya, onay, çakışma, diff, rollback akışları gerçek çalışır.
+
+
+## Hızlı deneme ve kesin kalite kapısı
+
+Ana PARDEX ekranındaki **AI ile tek görev teslimi** düğmesi aynı aracı ayrı pencerede açar. **AI ve Godot kontrolü** kurulum durumunu ücret/AI çağrısı yapmadan gösterir. İstenirse yeni ve mevcut dosyaların üzerine yazılmayan bir Godot 4 gemi-hareket örneği hazırlanır (sabit şablon, AI üretimi değildir). Demo sahnesi Godot 4.2+ ile oynanabilir olacak şekilde oluşturulmuştur; gerçek motor başlatma testi yalnızca motor kuruluysa yapılabilir.
+
+Artık AI komutu başarısızsa hiçbir değişiklik incelemeye alınmaz. Çalışma sırasında **herhangi bir** izinli kaynak dosyası değişmişse stale öneri reddedilir. Native CLI yine işletim sistemi izolasyonu değildir; bu kural yalnızca değişiklik tespiti ve onay kapısıdır. Gerçek Windows ve CLI hesaplarıyla uçtan uca test beklemektedir.

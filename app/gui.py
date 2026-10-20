@@ -63,6 +63,18 @@ class Studio(tk.Tk):
         self.refresh()
         self.after(300,self.load_state)
 
+    def open_delivery(self):
+        # A new process avoids nested Tk event loops and preserves the main UI.
+        script = Path(__file__).with_name('delivery_console.py')
+        args = [sys.executable, str(script)]
+        selected = self.v_proj.get()
+        if selected and Path(selected).is_dir():
+            args.extend(['--project', selected])
+        try:
+            subprocess.Popen(args, cwd=str(script.parent), env=os.environ.copy())
+        except OSError as exc:
+            messagebox.showerror('Tek Görev Teslimi', str(exc))
+
     def _style(self):
         style=ttk.Style(self)
         style.theme_use('clam')
@@ -162,6 +174,7 @@ class Studio(tk.Tk):
         line=ttk.Frame(p);line.pack(anchor='w',pady=12)
         self.btn(line,'Yeni proje',lambda:self.tabs.select(self.p_proj))
         self.btn(line,'Görev yaz',lambda:self.tabs.select(self.p_agent))
+        self.btn(line,'AI ile tek görev teslimi',self.open_delivery)
         self.btn(line,'Programları kontrol et',lambda:self.tabs.select(self.p_sys))
         self.btn(line,'Sıradaki adım ne?',self.suggest_step)
 

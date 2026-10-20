@@ -156,6 +156,8 @@ def deliver(project, goal, relative_paths, *, provider='Codex', owner_confirms=F
                           day_limit=day_limit, max_minutes=max_minutes)
         if not isinstance(result, dict):
             raise RuntimeError('AI runner returned no structured result')
+        if result.get('ai_ok') is not True:
+            raise RuntimeError('AI command did not succeed; no proposal staged or applied')
         after = _snapshot(copy)
         changes = {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
         # Missing source files and deletion are not supported by the approval tool.
@@ -170,11 +172,13 @@ def deliver(project, goal, relative_paths, *, provider='Codex', owner_confirms=F
             proposed = change_review._contained(copy, rel)
             if not proposed.is_file():
                 raise RuntimeError('AI deleted a source file: ' + rel)
-        # If the owner edits during the AI execution, require a fresh proposal.
+        # If the owner edits ANY source while AI is working, do not stage stale patches.
+        # Native CLI is not OS-sandboxed; this detects, but cannot prevent, host edits.
         original_now = _snapshot(source)
-        for rel in changed:
-            if original_now.get(rel) != before.get(rel):
-                raise RuntimeError('Live project changed while AI worked: ' + rel)
+        if original_now != before:
+            drift = sorted(k for k in set(before) | set(original_now)
+                           if original_now.get(k) != before.get(k))
+            raise RuntimeError('Live project changed while AI worked: ' + ', '.join(drift[:5]))
         review = change_review.stage(source, copy, changed, home=store / 'reviews')
         callback('Kod önerisi oluşturuldu. Gerçek proje değiştirilmedi.')
         return {'state': 'awaiting-owner-review', 'review_id': review['review_id'],

@@ -98,3 +98,15 @@ Sıkı izolasyon, native abonelik CLI'larını **durduran** güvenlik kapısıd�
 Bir veya iki ayrı ayrı onaylı işi belirli bir zaman aralığına kaydeden çevrimdışı `app/shift_scheduler.py` ve varsayılan kuru-çalıştırmalı `app/scheduler_cli.py` eklendi. **Kendiliğinden 7/24 çalışmaz, OS seviyesinde izole değildir.** Riskli native yürütme ayrıca iki açık izin gerektirir ve sıkı modda yasaktır. [Ayrıntılar](docs/PHASE2H_SCHEDULED_SHIFTS.md).
 
 Windows'ta **`05_AI_VARDIYA_PLANLAYICI.cmd`** Türkçe plan oluşturma, listeleme ve ücretsiz vade kontrolü ekranını açar. Bu pencere kendi başına bir zamanlayıcı servisi başlatmaz.
+
+
+## Hızlı başlangıç — Tek görevle gerçek teslim
+
+1. Python 3.10+ ve Godot 4.2+ kurun; bilgisayarınızda en az bir oturumu açık Codex, Claude Code veya Gemini CLI bulunmalı. Bunlar bu depo tarafından kurulmaz ve aboneliğe erişim garanti edilmez.
+2. \`08_TEK_GOREV_TESLIM.cmd\` ile **Tek Görev Teslimi** ekranını açın. Alternatif: PARDEX ana ekranı > **AI ile tek görev teslimi**.
+3. **AI ve Godot kontrolü** ile eksik programları görün. Henüz projeniz yoksa **Deneme Godot oyunu oluştur** düğmesi açık onayınızla yeni ve üzerine yazılmayan bir Godot 4 projesi oluşturur. Bu örnek sabit şablondur; AI çıktısı değildir.
+4. Bir görev yazın ve değiştirilmesine izin verdiğiniz kod dosyalarını belirtin. Örneğin: \`Geminin hareket hızını iki katına çıkar\`; dosya \`scripts/player.gd\`.
+5. Önizleme ücretsizdir. Native CLI izolasyon sınırını ve olası abonelik kullanımını onayladıktan sonra tek çağrı yapılır. AI komutu hata verirse değişiklik paketi oluşturulmaz.
+6. Dosya farkını ve test raporunu inceleyin. Son onaydan sonra proje dosyaları değiştirilir; geri alma \`07_AI_DEGISIKLIK_INCELE.cmd\` aracındadır.
+
+**Kanıt sınırı:** Çevrimdışı entegrasyon testinde AI çağrısı taklit edilir. Gerçek Windows/Godot ve üç sağlayıcı CLI kombinasyonu bu CI ortamında doğrulanmış değildir. Yerel CLI tam işletim sistemi sandbox'ı değildir; sıkı izolasyon modu onu engeller. Gerçek token bakiyesi, API faturası ve tasarruf ölçülmez.
