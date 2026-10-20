@@ -86,7 +86,7 @@ def run_isolated_regression(candidate,timeout=110):
  docker=core.which('docker')
  if not docker:
   return subprocess.CompletedProcess([],126,'Docker guvenli calistirici bulunamadi; AI kodu host uzerinde calistirilmadi.')
- image=os.environ.get('PARDEX_TEST_IMAGE','python:3.12-slim-bookworm')
+ image=os.environ.get('PARDEX_TEST_IMAGE','pardex-core-tests:3.12')
  # Docker image tags may be mutable; production deployment should pin digest.
  present=core.run([docker,'image','inspect',image],candidate,timeout=20,env=core.safe_env())
  if present.returncode:

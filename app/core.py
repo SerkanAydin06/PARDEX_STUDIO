@@ -353,6 +353,7 @@ def run_ai_task(project,kind,description,provider_pref='Otomatik',quality='Denge
     # Do not claim CLI success implies code quality or completed implementation.
     if on_update: on_update('AI gorevi '+('tamamlandi' if result.returncode==0 else 'basarisiz')+'. Yerel dogrulama...')
     verified,test_report=validate(project,engine)
+    test_report=redact_log_output(test_report)
     good=(result.returncode==0 and verified)
     logdir=project/'.studio'/'logs'; logdir.mkdir(parents=True,exist_ok=True)
     filename=dt.datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+provider.lower()+'.txt'

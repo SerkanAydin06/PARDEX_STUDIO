@@ -18,7 +18,7 @@ Bu PR, farklı oyunları ve uygulamaları kullanan ortak çekirdeği değiştirm
 - Daha önce aday kod Python host sürecinde test ediliyordu; bu yol kaldırıldı.
 - Artık yalnızca önceden indirilmiş yerel Docker imajı kullanılır; Docker yoksa test fail-closed olur.
 - Docker komutu ağsız, salt okunur kaynak bağlama, yetkisiz kullanıcı, yetenekleri kaldırma ve kaynak limitleriyle çalışır.
-- Varsayılan örnek imaj python:3.12-slim-bookworm; üretimde doğrulanmış SHA256 digest ile sabitlenmelidir.
+- Varsayılan örnek imaj pardex-core-tests:3.12 (Dockerfile: docker/Dockerfile.tests); üretimde doğrulanmış SHA256 digest ile sabitlenmelidir.
 - Bu ortamda gerçek Docker ve Windows+WSL entegrasyonu doğrulanmadı. Docker tek başına kesin bir saldırgan-kod izolasyonu sağlamaz; güçlü düşmanca koda karşı ayrı VM/uzak worker gerekir.
 - Kod üreten Codex/Claude/Gemini CLI'ların kendi sandbox özellikleri bu testle aynı değildir. CLI'ların üretim yetkileri henüz ayrıca sertleştirilmelidir.
 
@@ -31,3 +31,10 @@ Bu PR, farklı oyunları ve uygulamaları kullanan ortak çekirdeği değiştirm
 ## Test
 \`python -m unittest discover -s tests -p 'test_*.py' -q\`
 \`python -m compileall -q app tests\`
+
+
+Güvenli aday testi için ayrı çalışan Docker imajı sahibi tarafından hazırlanır:
+
+docker build -t pardex-core-tests:3.12 -f docker/Dockerfile.tests .
+
+Bu komut ağ kullanabilir, fakat otonom işçi tarafından otomatik çalıştırılmaz. Windows Docker Desktop/WSL ve digest pinleme ayrıca doğrulanmalıdır.
