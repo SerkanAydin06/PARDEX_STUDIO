@@ -57,3 +57,12 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 - [x] Türkçe AI Genel Müdür arayüzünden QA raporu ve pilot yönetimi
 - [ ] Gerçek VM/read-only denetçi sandbox'u ve sabitlenmiş tekrar üretilebilir deneyler (2E)
 - [ ] Sağlayıcı desteklerse doğrulanabilir gerçek token/kredi raporu; otomatik model geçişi yok (2E)
+
+
+## Aşama 2E — ölçüm ve güvenlik kontrolü (PR aşamasında)
+- [x] Sıkı opt-in mod, native AI CLI işlerini ortak girişlerde durdurur.
+- [x] Özel proje hafızası dışarıda kalacak biçimde kaynak kod parmak izi.
+- [x] Kullanıcı onaylı Codex CLI JSONL token metaverisi içe aktarımı; ücret doğrulaması yok.
+- [x] Türkçe AI Genel Müdür güvenlik ve metaveri kontrolü.
+- [ ] İzole AI worker/container/VM, imaj digest güveni, gerçek Windows/WSL deneyi.
+- [ ] Sağlayıcıların güvenilir maliyet verileri, otomatik JSONL toplayıcı, gerçek A/B pilotu.

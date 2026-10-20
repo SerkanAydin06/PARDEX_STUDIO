@@ -54,6 +54,8 @@ def run_candidate_coder(candidate,max_seconds=360):
    'Kod yazmadan once hedefli dosyalara bak, en az degisiklik yap. '
    'Kisa degisiklik ozeti ver.')
  if core.usage_count()>=8:raise RuntimeError('Gunluk 8 AI cagri siniri doldu')
+ import worker_guard
+ worker_guard.guard_native_agent()
  core.record_usage('Codex')
  cmd=[exe,'exec','--sandbox','workspace-write','-']
  r=core.run(cmd,cand,timeout=max_seconds,input_data=prompt,env=core.safe_env())
@@ -142,6 +144,8 @@ def inspect_candidate(candidate,provider='Gemini',max_seconds=100):
  if provider=='Claude':args=[exe,'-p','--model','sonnet','--max-turns','1','--permission-mode','plan',prompt]
  else:args=[exe,'--model','auto','--prompt',prompt,'--output-format','json']
  if core.usage_count()>=8:raise RuntimeError('Gunluk 8 AI cagri siniri doldu')
+ import worker_guard
+ worker_guard.guard_native_agent()
  core.record_usage(provider)
  r=core.run(args,brain._safe_review_workspace(),timeout=max_seconds,env=core.safe_env())
  if r.returncode:raise RuntimeError('Denetim başarısız: '+brain.sanitize(r.stdout)[-230:])

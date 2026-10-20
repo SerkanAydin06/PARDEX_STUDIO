@@ -320,6 +320,8 @@ def run_ai_task(project,kind,description,provider_pref='Otomatik',quality='Denge
     if engine=='unknown': raise RuntimeError('Bu klasor taninan bir proje degil')
     if not description.strip(): raise RuntimeError('Gorevi yazmalisin')
     if len(description)>1200: raise RuntimeError('Gorev cok uzun (1200 karakter siniri).')
+    import worker_guard
+    worker_guard.guard_native_agent()
     provider,model=route(kind,provider_pref,quality)
     if provider_pref=='Otomatik' and quality=='Dengeli' and provider=='Codex':
         try:

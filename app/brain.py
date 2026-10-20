@@ -240,6 +240,8 @@ def model_review(proposal_id,provider,home=None,max_seconds=90):
  else:
   args=[exe,'--model','auto','--prompt',prompt,'--output-format','json']
  if core.usage_count()>=8:raise RuntimeError('Gunluk 8 AI cagri siniri doldu')
+ import worker_guard
+ worker_guard.guard_native_agent()
  core.record_usage(provider)
  result=core.run(args,_safe_review_workspace(home),timeout=max_seconds,env=core.safe_env())
  if result.returncode!=0:raise RuntimeError(provider+' incelemesi basarisiz: '+sanitize(result.stdout)[-300:])
@@ -272,6 +274,8 @@ def generate_rule_from_incidents(home=None,max_seconds=100):
  else:
   args=[exe,'--model','auto','--prompt',prompt,'--output-format','json']
  if core.usage_count()>=8:raise RuntimeError('Gunluk 8 AI cagri siniri doldu')
+ import worker_guard
+ worker_guard.guard_native_agent()
  core.record_usage(provider)
  r=core.run(args,_safe_review_workspace(home),timeout=max_seconds,
              input_data=prompt if provider=='Codex' else None,env=core.safe_env())
@@ -375,6 +379,8 @@ def analyze_radar_with_ai(home=None,max_seconds=110):
    'Uygun olmayan guncellemeleri simdilik ertele. Veri:\n'+json.dumps(payload,ensure_ascii=False)[:3000])
  if provider=='Gemini':args=[exe,'--model','auto','--prompt',prompt,'--output-format','json']
  else:args=[exe,'-p','--model','sonnet','--max-turns','1','--permission-mode','plan',prompt]
+ import worker_guard
+ worker_guard.guard_native_agent()
  core.record_usage(provider)
  response=core.run(args,_safe_review_workspace(home),timeout=max_seconds,env=core.safe_env())
  if response.returncode:raise RuntimeError('Radar AI degerlendirmesi tamamlanamadi: '+sanitize(response.stdout)[-150:])

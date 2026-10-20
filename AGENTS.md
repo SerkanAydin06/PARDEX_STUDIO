@@ -56,3 +56,9 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - Test sonucu, AI CLI başarısı ve kullanıcının onayı ayrı kaydedilir. FAIL ve kanıtsız inceleme onay kuyruğunu geçemez.
 - A/B karşılaştırmada aynı görev metni, aynı motor/test profili ve farklı izole proje kopyaları gerekir. En az 3 eşleştirilmiş çift olmadan iddia üretme. Tek başına 3 çift de istatistiksel kesinlik değildir.
 - İzin olmadan ek AI çalıştırma, modeli değiştirme, para harcama veya yayın yapma.
+
+
+### 2E AI çalışma kuralları
+- Sıkı mod açıkken yerel CLI engellenir; bu sandbox sunmaz. Korumanın etrafından dolaşma.
+- Model kıyasından önce gizli olmayan aynı başlangıç kodunu parmak iziyle karşılaştır; farklı motor/sürümü eşit kabul etme.
+- JSONL token sayıları sadece kullanıcı içe aktarımıyla ve doğrulanmamış işaretiyle saklanır. Fatura, bakiye, para veya otomatik model seçimi uydurma.

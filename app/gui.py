@@ -16,6 +16,9 @@ import task_queue
 import general_manager
 import performance
 import quality_manager
+import worker_guard
+import benchmark_lab
+import usage_receipts
 
 BG='#0c1220'; PANEL='#172236'; PANEL2='#202e46'; FG='#ebf2ff'; SUB='#aebdd7'; BLUE='#628eea'; GREEN='#60d4ac'
 
@@ -53,6 +56,7 @@ class Studio(tk.Tk):
         self.v_queue_priority=tk.IntVar(value=3)
         self.v_manager_risk=tk.StringVar(value='Normal')
         self.v_manager_priority=tk.IntVar(value=3)
+        self.v_strict_workers=tk.BooleanVar(value=worker_guard.strict_worker_mode())
         self._style()
         self._layout()
         self.refresh()
@@ -547,10 +551,53 @@ class Studio(tk.Tk):
         self.btn(p,'A/B pilotu planla (çağrısız)',self.manager_pilot_create)
         self.btn(p,'A/B pilotlarını gör',self.manager_pilot_report)
         self.btn(p,'Seçili görevin denemesini kaydet',self.manager_pilot_record)
+        safety=ttk.Frame(p);safety.pack(anchor='w',pady=5)
+        ttk.Checkbutton(safety,text='Sıkı izolasyon (native AI işlemlerini durdur)',
+                       variable=self.v_strict_workers,command=self.manager_strict_toggle).pack(side='left')
+        self.btn(safety,'Kaynak kodu parmak izi',self.manager_fingerprint)
+        self.btn(safety,'Codex JSONL kullanımını içe aktar',self.manager_import_usage)
         self.manager_info=self.lbl(p,'','Dim.TLabel');self.manager_info.pack(anchor='w',pady=6)
         self.hint(p,'Basit: 1 AI. Normal: kod + bağımsız inceleme. Kritik: plan + kod + inceleme. '
                  'Tahmini çağrı sayısı gerçek abonelik token kotası değildir.')
         self.manager_refresh()
+
+    def manager_strict_toggle(self):
+        state=self.v_strict_workers.get()
+        if not state and not messagebox.askyesno('Güvenlik kontrolü',
+               'Native CLI görevleri OS düzeyinde izole değildir. Sıkı mod kapatılsın mı?'):
+            self.v_strict_workers.set(True);return
+        if state:os.environ['PARDEX_REQUIRE_ISOLATED_AI']='1'
+        else:os.environ.pop('PARDEX_REQUIRE_ISOLATED_AI',None)
+        messagebox.showinfo('Sıkı izolasyon','Sıkı modda izole olmayan AI görevleri durdurulur.'
+                            if state else 'Native AI görevleri manuel kullanıcı onayıyla çalışabilir.')
+
+    def manager_fingerprint(self):
+        project=self.active()
+        if not project:return
+        try:
+            x=benchmark_lab.fingerprint(project)
+            messagebox.showinfo('A/B başlangıç parmak izi',
+                f"Motor: {x['engine']}\nDosya: {x['files']}\nSHA256: {x['fingerprint']}\n"
+                'İki denemeden önce alınır. Kalite veya tasarruf ispatı değildir.')
+        except Exception as e:messagebox.showerror('Parmak izi',str(e))
+
+    def manager_import_usage(self):
+        ident=self.v_queue_id.get().strip()
+        if not ident:
+            messagebox.showinfo('Codex token kaydı','Görev Merkezi’nden bitmiş Codex görevi seç.');return
+        attempt=simpledialog.askinteger('Deneme','Kaçıncı deneme?',initialvalue=1,minvalue=1,maxvalue=100,parent=self)
+        if attempt is None:return
+        path=filedialog.askopenfilename(title='Codex CLI JSONL dosyası',
+                   filetypes=[('JSONL','*.jsonl *.json'),('Tüm dosyalar','*.*')])
+        if not path:return
+        if not messagebox.askyesno('İçe aktarma onayı',
+             'Yalnızca CLI token sayıları kaydedilir. Fatura/kalan kota doğrulanmış değildir. Devam edilsin mi?'):return
+        try:
+            if Path(path).stat().st_size>1000000:raise ValueError('1MB dosya sınırı')
+            value=usage_receipts.import_codex_usage(ident,attempt,
+                       Path(path).read_text(encoding='utf-8'),owner_confirms_source=True)
+            messagebox.showinfo('İçe aktarıldı',str(value)+'\nRaporlanan metaveri, doğrulanmış ücret değildir.')
+        except Exception as e:messagebox.showerror('İçe aktarım hatası',str(e))
 
     def manager_preview(self):
         p=self.active()
