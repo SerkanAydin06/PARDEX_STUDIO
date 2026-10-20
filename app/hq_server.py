@@ -16,6 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hq_ceo  # noqa: E402
+import hq_projects as projects  # noqa: E402
+import hq_research as research  # noqa: E402
+import hq_router as router  # noqa: E402
 import hq_store as store  # noqa: E402
 import hq_workers as workers  # noqa: E402
 
@@ -27,12 +30,32 @@ MAX_BODY = 64 * 1024
 class Panel:
     """Holds per-server config so tests can use temporary databases."""
 
-    def __init__(self, db=None, queue_db=None, token=None, caller=None):
+    def __init__(self, db=None, queue_db=None, token=None, caller=None, ai=None, tester=None):
         self.db, self.queue_db = db, queue_db
         self.token = token or secrets.token_urlsafe(24)
         self.caller = caller
+        self.ai, self.tester = ai, tester  # test doubles; None = real router / engine tests
         self.run_state = {'running': '', 'last': None, 'error': ''}
+        self.prod_state = {'running': '', 'error': ''}
         self.lock = threading.Lock()
+
+    def produce_async(self, pid):
+        with self.lock:
+            if self.prod_state['running']:
+                raise ValueError('Şu anda başka bir proje üretimde')
+            self.prod_state.update(running=pid, error='')
+
+        def work():
+            try:
+                projects.run_production(pid, self.db, ai=self.ai, tester=self.tester)
+            except Exception as exc:
+                self.prod_state['error'] = str(exc)[:300]
+                store.event('sistem', 'production-error', pid, str(exc)[:200], self.db)
+            finally:
+                self.prod_state['running'] = ''
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        return t
 
     # ---- read ----
     def dashboard(self):
@@ -42,6 +65,11 @@ class Panel:
             store.event('sistem', 'sync-failed', '', type(exc).__name__, self.db)
         d = store.dashboard(self.db)
         d['run'] = dict(self.run_state)
+        d['production'] = dict(self.prod_state)
+        d['questions'] = projects.open_questions(self.db)
+        d['products'] = projects.products(self.db)[:6]
+        if d['questions']:
+            d['briefing'].insert(0, {'label': 'Karar gerekiyor', 'text': f"{len(d['questions'])} proje sorusu cevabını bekliyor."})
         return d
 
     def settings_view(self):
@@ -141,6 +169,18 @@ def make_handler(panel):
                     '/api/goals': lambda: store.goals(path=panel.db),
                     '/api/settings': panel.settings_view,
                 }
+                m = re.fullmatch(r'/api/product/(P-[0-9a-f]{9})', p)
+                if m:
+                    return self._send(200, projects.get(m.group(1), panel.db))
+                m = re.fullmatch(r'/api/report/([a-z]{2,12})', p)
+                if m:
+                    return self._send(200, store.department_report(m.group(1), panel.db))
+                routes.update({
+                    '/api/products': lambda: projects.products(panel.db),
+                    '/api/questions': lambda: projects.open_questions(panel.db),
+                    '/api/routing': lambda: router.routing_table(panel.db),
+                    '/api/lessons': lambda: store.lessons(path=panel.db),
+                })
                 if p not in routes:
                     return self._err(404, 'Yok')
                 return self._send(200, routes[p]())
@@ -189,6 +229,39 @@ def make_handler(panel):
                     return workers.accept(ident, db, qdb)
                 panel.run_async(ident)
                 return {'started': ident}
+            if p == '/api/product':
+                return projects.new_product(str(b.get('name', '')), str(b.get('kind', '')), db)
+            m = re.fullmatch(r'/api/product/(P-[0-9a-f]{9})/(chat|start|run|accept|changes|cancel)', p)
+            if m:
+                pid, act = m.groups()
+                if act == 'chat':
+                    return projects.chat(pid, str(b.get('text', '')), db, ai=panel.ai)
+                if act == 'start':
+                    out = projects.start(pid, db, ai=panel.ai, existing_folder=str(b.get('folder', '') or ''))
+                    panel.produce_async(pid)
+                    return out
+                if act == 'run':
+                    panel.produce_async(pid)
+                    return {'started': pid}
+                if act == 'accept':
+                    return projects.accept(pid, db)
+                if act == 'changes':
+                    out = projects.request_changes(pid, str(b.get('note', '')), db)
+                    panel.produce_async(pid)
+                    return out
+                return projects.cancel(pid, db)
+            m = re.fullmatch(r'/api/question/(Q-[0-9a-f]{9})/answer', p)
+            if m:
+                pid, resume = projects.answer(m.group(1), str(b.get('answer', '')), db)
+                if resume:
+                    panel.produce_async(pid)
+                return {'product': pid, 'resumed': resume}
+            if p == '/api/research':
+                return research.research(str(b.get('focus', '')), str(b.get('topic', '')), db, ai=panel.ai)
+            m = re.fullmatch(r'/api/lesson/(D-[0-9a-f]{9})/delete', p)
+            if m:
+                store.delete_lesson(m.group(1), db)
+                return {'deleted': m.group(1)}
             if p == '/api/dept-job':
                 return workers.add_department_job(str(b.get('dept', '')), str(b.get('title', '')), db)
             if p == '/api/idea':

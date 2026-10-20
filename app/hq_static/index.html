@@ -24,8 +24,9 @@
   </div>
   <nav class="wrap tabs" aria-label="Bölümler">
     <button class="tab active" data-view="office" type="button">Ofis</button>
+    <button class="tab" data-view="projects" type="button">Projeler</button>
     <button class="tab" data-view="jobs" type="button">İşler</button>
-    <button class="tab" data-view="ideas" type="button">Fikirler</button>
+    <button class="tab" data-view="ideas" type="button">Fikirler &amp; Ar-Ge</button>
     <button class="tab" data-view="depts" type="button">Departmanlar</button>
     <button class="tab" data-view="finance" type="button">Finans</button>
     <button class="tab" data-view="settings" type="button">Ayarlar</button>
@@ -44,6 +45,7 @@
           <h2>Onay Masası</h2>
           <span class="muted small">Sen onaylamadan hiçbir AI çağrısı, yayın veya harcama olmaz</span>
         </div>
+        <div id="office-questions" class="stack"></div>
         <div id="approvals" class="stack"></div>
         <form id="goal-form" class="goal-form">
           <label for="goal-text">Şirkete yeni hedef ver — CEO departmanlara böler</label>
@@ -72,6 +74,26 @@
     <div class="scroll-x"><div id="pipeline" class="pipeline"></div></div>
   </section>
 
+  <!-- PROJELER -->
+  <section id="view-projects" class="view" hidden>
+    <div class="split">
+      <div class="card side">
+        <h2>Projeler</h2>
+        <form id="new-product" class="stack-sm">
+          <label for="np-name">Yeni proje adı</label>
+          <input id="np-name" type="text" placeholder="Örn: Yıldız Toplayıcı">
+          <label for="np-kind">Tür</label>
+          <select id="np-kind"><option value="oyun">Oyun</option><option value="uygulama">Uygulama</option></select>
+          <button class="btn btn-dark" type="submit">Plan sohbetini başlat</button>
+        </form>
+        <div id="product-list" class="stack-sm"></div>
+      </div>
+      <div class="card grow" id="product-detail">
+        <div class="empty">Soldan bir proje seç veya yeni proje başlat. Ürün Müdürü seninle ana hatları konuşur; "Bunu yap" dediğinde üretim başlar.</div>
+      </div>
+    </div>
+  </section>
+
   <!-- İŞLER -->
   <section id="view-jobs" class="view" hidden>
     <div class="card-head"><h2>Bütün işler</h2></div>
@@ -81,6 +103,17 @@
 
   <!-- FİKİRLER -->
   <section id="view-ideas" class="view" hidden>
+    <form id="research-form" class="card">
+      <h2>Ar-Ge'den araştırma iste</h2>
+      <p class="muted small">Ar-Ge internette arar. Her fikir en az 2 farklı siteden doğrulanan kaynakla gelir; kaynaksız olanlar elenir. Ücretli üyelik önerileri yalnızca sana sunulur, satın alma yapılmaz.</p>
+      <div class="form-grid">
+        <div><label for="rs-focus">Odak</label>
+          <select id="rs-focus"><option value="oyun">Oyun fikirleri</option><option value="uygulama">Uygulama / araç fikirleri</option><option value="sirket">Şirketi geliştirme</option><option value="uyelik">AI araç / üyelik ihtiyacı</option></select></div>
+        <div><label for="rs-topic">Konu (isteğe bağlı)</label><input id="rs-topic" type="text" placeholder="Örn: mobil, eğitim, idle oyunlar"></div>
+      </div>
+      <div class="row"><button class="btn btn-dark" type="submit">Araştır (1 çağrı)</button><span id="rs-status" class="muted small"></span></div>
+      <div id="rs-result" class="stack-sm"></div>
+    </form>
     <div class="card">
       <h2>Yeni fikir</h2>
       <form id="idea-form" class="idea-form">
@@ -152,9 +185,20 @@
           <label for="set-currency">Para birimi</label>
           <select id="set-currency"><option>TRY</option><option>USD</option><option>EUR</option></select>
         </div>
+        <div>
+          <label for="set-day">Günlük AI çağrı sınırı</label>
+          <input id="set-day" type="number" min="0" max="200">
+        </div>
+        <div>
+          <label for="set-root">Ürün klasörü (şirket deposunun dışında)</label>
+          <input id="set-root" type="text">
+        </div>
       </div>
       <h3>Departman bütçeleri (haftalık çağrı)</h3>
       <div id="budget-grid" class="form-grid"></div>
+      <h3>Model yönlendirme (aboneliklerin)</h3>
+      <p class="muted small" id="routing-installed"></p>
+      <div class="scroll-x"><table class="table"><thead><tr><th>Görev</th><th>Şu an</th><th>Sabitle</th><th>Model</th><th>Effort</th></tr></thead><tbody id="routing-body"></tbody></table></div>
       <div class="row"><button class="btn btn-dark" type="submit">Ayarları kaydet</button></div>
     </form>
     <div class="card">
