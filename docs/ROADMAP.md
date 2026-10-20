@@ -38,3 +38,7 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 - [ ] Docker/Windows/WSL entegrasyon testi, imaj digest sabitleme ve daha güçlü VM izolasyonu.
 - [ ] AI kodlayıcı CLI'nın yetkilerini ayrıca sınırla; sandbox yalnızca aday regresyon testini kapsıyor.
 - [ ] Geçmiş commit'lerde sızmış özel verileri/anahtarları ayrıca denetle ve gerekiyorsa sırları döndür.
+
+## Aşama 2B — Yapılan ilk paket
+- [x] Basit/Normal/Kritik planlar, kalıcı görev bağımlılıkları ve sahibin aşama bazlı kabulü.
+- [ ] Gerçek otomatik AI CEO planlaması, bağımsız entegrasyon testleri, gerçek maliyet ölçümü, daemon ve PR işçisi daha sonra. Mevcut uygulama onaylı yerel prototiptir.

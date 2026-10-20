@@ -71,3 +71,7 @@ Ayrıntılar: [KURULUM_VE_KULLANIM.md](KURULUM_VE_KULLANIM.md), [TEST_RAPORU.md]
 ## Aşama 2A: Kalıcı Görev Merkezi
 
 Görevler yerel SQLite veritabanına kaydedilir. Sahip onayı olmadan AI çağrısı başlamaz; biten iş kullanıcı görsel/oynanış kabulü bekler. Başarısız işler kendiliğinden tekrar edilmez. Gerçek kalan abonelik kotası **bilinmez**. Ayrıntılar: [Aşama 2A](docs/PHASE2_TASK_CENTER.md).
+
+## Aşama 2B — AI Genel Müdür
+
+Yerel risk temelli görev planları ve kullanıcı kabulüyle bağımlılık kontrolü eklendi. Basit işte 1, orta riskte 2, kritik işte en fazla 3 AI çağrısı için görev hazırlanır; gerçek kalan token kotası bilinmez. [Nasıl çalışıyor?](docs/PHASE2_GENERAL_MANAGER.md)

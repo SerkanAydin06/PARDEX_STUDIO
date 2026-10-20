@@ -37,3 +37,6 @@ Durum: 2026-10-20. **Gerçek kullanıcı hesabı veya üretim sistemi üzerinde 
 
 ## Aşama 2A testleri
 SQLite görev kalıcılığı, öncelik, eşzamanlı çalışan engeli, sahip onayı, günlük kullanım sınırı, başarılı/başarısız test, otomatik tekrarsız hata ve kurtarma, log redaksiyonu için yeni başsız testler eklendi. Gerçek AI oturumları test edilmedi; GitHub Actions sonucunu PR üzerinde ayrıca izle.
+
+## Aşama 2B — AI Genel Müdür doğrulaması
+Yerel geliştirme dalında 141 test başarıyla tamamlandı. GitHub CI ve gerçek Windows/CLI hesapları ayrıca doğrulanmalıdır. Görev bağımlılıkları ve önceki AI notunun yalnızca kabul sonrasında aktarılması için testler eklendi.
