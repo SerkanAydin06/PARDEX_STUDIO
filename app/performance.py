@@ -33,7 +33,9 @@ def report(path=None,project=None):
                     'failed':sum(r['result_code'] in ('ai_failed','test_failed','qa_failed','exception','interrupted') for r in done),
                     'median_elapsed_seconds':round(median(durations),2) if durations else None,
                     'acceptance_rate_reviewed':round(accepted/len(reviewed),3) if reviewed else None})
-    return {'total_attempts':len(rows),
+    import usage_receipts
+    receipts=usage_receipts.summary(path,project)
+    return {'provider_reported_usage':receipts,'total_attempts':len(rows),
             'completed_attempts':sum(r['result_code']!='running' for r in rows),
             'total_recorded_seconds':round(sum(float(r['elapsed_seconds']) for r in rows
                                                 if r['elapsed_seconds'] is not None),2),

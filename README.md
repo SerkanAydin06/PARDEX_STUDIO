@@ -83,3 +83,7 @@ Yerel risk temelli görev planları ve kullanıcı kabulüyle bağımlılık kon
 
 ## 2D — Bağımsız AI Kalite Müdürü
 AI Genel Müdür, Normal/Kritik planlarda farklı sağlayıcıdan bir bağımsız inceleme görevi oluşturur. İnceleme sonucu yapılandırılmış PASS/FAIL ve kısa bulgular ile kaydedilir. Bu **bir AI iddiasıdır**; gerçek doğrulama ve sahibin kabulü ayrıca gerekir. Sahibi onaylamadan model değiştirilmez veya kod yayınlanmaz. Aynı iş/test profilini ayrı proje kopyalarında sınayan, AI çağrısı yapmayan A/B pilot kayıtları da arayüze eklendi. Ayrıntılar: [2D kalite ve A/B sınırlamaları](docs/PHASE2D_INDEPENDENT_QA.md).
+
+
+## 2E — Ölçüm ve güvenlik laboratuvarı (inceleme dalında)
+Sıkı izolasyon, native abonelik CLI'larını **durduran** güvenlik kapısıdır; gerçek izole AI worker değildir. Başlangıç kod parmak izi ve kullanıcı onaylı Codex CLI JSONL token aktarımı bulunur. Veriler fatura/kota veya ölçülmüş tasarruf değildir. Ayrıntılar: [2E belgesi](docs/PHASE2E_WORKER_EVIDENCE.md).

@@ -120,6 +120,8 @@ def _call_readonly(provider,prompt,timeout=100):
  work=brain._safe_review_workspace()
  if provider=='Gemini':cmd=[exe,'--model','auto','--prompt',prompt]
  else:cmd=[exe,'-p','--model','sonnet','--max-turns','1','--permission-mode','plan',prompt]
+ import worker_guard
+ worker_guard.guard_native_agent()
  r=core.run(cmd,work,timeout=timeout,env=core.safe_env())
  return {'provider':provider,'ok':r.returncode==0,'output':_limited(r.stdout,1800) if r.returncode==0 else _limited(r.stdout,500)}
 
@@ -136,6 +138,8 @@ def meet(goal='',with_ai=False,home=None,brain_home=None):
   for ai in ('Gemini','Claude')[:min(2,limits['company_ai_calls_per_meeting'])]:
    if not core.which('gemini' if ai=='Gemini' else 'claude'):
     notes.append({'provider':ai,'ok':False,'output':'CLI kurulu degil; hak kullanilmadi.'});continue
+   import worker_guard
+   worker_guard.guard_native_agent()
    core.record_usage(ai)
    notes.append(_call_readonly(ai,_review_prompt('Bagimsiz '+ai+' danisman',a)))
  row={'id':'M-'+uuid.uuid4().hex[:9], 'date':core.now(), 'agenda':a,'ai_requested':bool(with_ai),
@@ -223,6 +227,8 @@ def export_report(meeting):
 
 def local_ollama_opinion(goal='',model='',timeout=90):
  """Optional local Ollama model; never accesses paid cloud and sends only user-supplied goal."""
+ import worker_guard
+ worker_guard.guard_native_agent()
  if not model:raise ValueError('Yerli model adi gerekli (ornegin ollama list ile sec).')
  if not re.fullmatch(r'[a-zA-Z0-9_.:/-]{2,100}',model):raise ValueError('Gecersiz model adi')
  prompt=('Turkce ve 130 kelimeyi asmadan bir oyun sirketi icin uc pratik iyilestirme fikri sun. '

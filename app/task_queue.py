@@ -226,6 +226,8 @@ def claim_next(day_limit=8,path=None):
         exe={'Claude':'claude','Codex':'codex','Gemini':'gemini'}[provider]
         if not core.which(exe):raise RuntimeError(provider+' kurulu degil')
         if core.project_type(row['project'])=='unknown':raise RuntimeError('Proje bulunamadi')
+        import worker_guard
+        worker_guard.guard_native_agent()
         db.execute('UPDATE tasks SET status="running",started_at=?,updated_at=?,attempts=attempts+1 WHERE id=?',
                    (core.now(),core.now(),row['id']))
         db.execute('''INSERT INTO task_attempt_metrics(task_id,attempt,project,kind,provider,model,started_at)
