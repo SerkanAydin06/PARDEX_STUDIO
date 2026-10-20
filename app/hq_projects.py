@@ -339,10 +339,29 @@ def _write_brief(folder, spec):
 def prepare_folder(p, path=None, existing=''):
     spec = p['spec']
     if existing:
-        folder = Path(existing).expanduser().resolve()
-        if _inside_company(folder):
-            raise ValueError('Ürün klasörü şirket deposunun içinde olamaz')
+        # Never run an AI writer, git init/add/commit or rollback in a user's
+        # live project. Import only allowed sources into a brand-new copy.
+        from project_delivery import _snapshot
+        source = Path(existing).expanduser()
+        if source.is_symlink():
+            raise ValueError('Sembolik bağlantı proje klasörü kullanılamaz')
+        source = source.resolve(strict=True)
+        if _inside_company(source) or not source.is_dir() or core.project_type(source) == 'unknown':
+            raise ValueError('Mevcut proje geçersiz veya şirket deposunun içinde')
+        root = Path(store.settings(path)['projects_root']).expanduser().resolve()
+        if _inside_company(root) or root == source or root.is_relative_to(source):
+            raise ValueError('Çalışma kopyası mevcut projenin içinde olamaz')
+        root.mkdir(parents=True, exist_ok=True)
+        folder = root / (_slug(spec.get('name') or p['name']) + '-kopya-' + p['id'][2:])
+        if folder.exists():
+            raise FileExistsError('Aynı isimde çalışma kopyası zaten var; üzerine yazılmadı')
+        folder.mkdir(mode=0o700)
+        _snapshot(source, target=folder)  # excludes .git, .studio, .env, credentials, symlinks
+        if core.project_type(folder) != core.project_type(source):
+            raise ValueError('Güvenli kopyada proje giriş dosyaları eksik')
         core.attach_project(folder, spec.get('summary', ''))
+        store.event('sistem', 'copy-existing-project', p['id'],
+                    'Orijinal değiştirilmedi; ayrı çalışma kopyası: ' + str(folder), path)
     else:
         root = Path(store.settings(path)['projects_root']).expanduser().resolve()
         if _inside_company(root):
@@ -361,8 +380,39 @@ def prepare_folder(p, path=None, existing=''):
 
 
 def _commit(folder, message):
-    if _git(folder, 'add', '-A') is None:
+    # This is invoked on PARDEX-owned copies/new projects only, never on an
+    # attached original. Refuse sensitive paths even if .gitignore was changed.
+    from project_delivery import _private
+    # Enumerate paths before staging. Never stage AI policy files or secrets.
+    inventory = _git(folder, 'ls-files', '--cached', '--others', '--exclude-standard', '-z')
+    if inventory is None:
         return False
+    if inventory.returncode or (inventory.stdout and not inventory.stdout.endswith('\0')):
+        raise RuntimeError('Git dosya listesi eksik; güvenli işlem iptal')
+    listed = list(dict.fromkeys(x for x in inventory.stdout.split('\0') if x))
+    policy = {'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'SECURITY.md'}
+    unsafe = [name for name in listed
+              if any(_private(part) for part in Path(name).parts) and name not in policy]
+    if unsafe:
+        raise ValueError('Gizli/özel dosya Git commit işleminden engellendi: ' + ', '.join(unsafe[:6]))
+    safe = [name for name in listed if name not in policy]
+    for i in range(0, len(safe), 50):
+        added = _git(folder, 'add', '-A', '--', *safe[i:i + 50])
+        if added is None or added.returncode:
+            raise RuntimeError('Güvenli Git stage işlemi başarısız; commit yapılmadı')
+    staged = _git(folder, 'diff', '--cached', '--name-only', '-z')
+    if staged is None or staged.returncode:
+        _git(folder, 'reset', '-q')
+        raise RuntimeError('Git sahnelenen dosyaları doğrulayamadı; commit iptal')
+    names = [x for x in staged.stdout.split('\0') if x]
+    if any(any(_private(part) for part in Path(name).parts) for name in names):
+        _git(folder, 'reset', '-q')
+        raise ValueError('Gizli/özel dosya Git commit işleminden engellendi')
+    try:
+        core.verify_git_publish_safe(folder)
+    except RuntimeError:
+        _git(folder, 'reset', '-q')
+        raise
     r = _git(folder, 'commit', '-q', '-m', message[:120])
     return bool(r and r.returncode == 0)
 
@@ -372,7 +422,10 @@ def _diff(folder, limit=6500):
     df = _git(folder, 'diff', 'HEAD', '--', '.', ':(exclude).studio')
     new = _git(folder, 'ls-files', '--others', '--exclude-standard')
     text = (st.stdout if st else '') + '\n' + (df.stdout if df else '')
+    from project_delivery import _private
     for rel in ((new.stdout if new else '').split())[:6]:
+        if any(_private(part) for part in Path(rel).parts):
+            continue
         f = Path(folder) / rel
         if f.is_file() and f.stat().st_size < 20000:
             try:
@@ -587,8 +640,15 @@ def _run(pid, path, ai, tester):
                 ask(pid, 'budget', f'Kontrol aşamasında durdu: {stop}', ['Bütçeyi artır ve devam et',
                     'Burada durdur, olanı teslim et'], k['id'], path)
                 return get(pid, path)
+            except RuntimeError as exc:
+                _pkg(k['id'], path, status='takildi', findings=str(exc)[:240], test=test)
+                ask(pid, 'qa', 'Bağımsız denetçi bulunamadı: ' + str(exc)[:200],
+                    ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
+                return get(pid, path)
             _set(pid, path, used_calls=get(pid, path)['used_calls'] + 1)
             verdict = _qa(rev['output']) if rev['ok'] else None
+            if rev.get('provider') == res.get('provider'):
+                verdict = ('FAIL', 'Bağımsız denetçi kodu yazan sağlayıcıyla aynı')
             if verdict is None:
                 verdict = ('FAIL', 'Kalite incelemesi geçerli PASS/FAIL formatında dönmedi')
             try:
@@ -597,6 +657,11 @@ def _run(pid, path, ai, tester):
                 _pkg(k['id'], path, status='duzeltme', test=test)
                 ask(pid, 'budget', f'Ek denetimde durdu: {stop}', ['Bütçeyi artır ve devam et',
                     'Burada durdur, olanı teslim et'], k['id'], path)
+                return get(pid, path)
+            except RuntimeError as exc:
+                _pkg(k['id'], path, status='takildi', findings=str(exc)[:240], test=test)
+                ask(pid, 'qa', 'Ek bağımsız denetçi bulunamadı: ' + str(exc)[:200],
+                    ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
                 return get(pid, path)
             if test_state is False:
                 verdict = ('FAIL', (verdict[1] if verdict[0] == 'FAIL' else 'Otomatik test başarısız') [:240])
@@ -616,7 +681,7 @@ def _run(pid, path, ai, tester):
         _pkg(k['id'], path, status='takildi', attempts=attempts, findings=verdict[1], test=test)
         store.add_lesson(k['dept'], f"Tekrarlayan sorun ({k['title'][:50]}): {verdict[1][:170]}", 'kalite', path)
         ask(pid, 'stuck', f"\"{k['title']}\" paketi {attempts} denemede kontrolden geçemedi. Son bulgu: {verdict[1]}",
-            ['Güçlü modelle bir kez daha dene', 'Bu paketi atla', 'Bu paketin değişikliklerini geri al ve atla'],
+            ['Güçlü modelle bir kez daha dene', 'Bu paketi atla'],
             k['id'], path)
         return get(pid, path)
 
@@ -638,8 +703,10 @@ def _extra_checks(p, k, folder, verdict, test_state, test, maker, reviewer, ai, 
                  path=path, avoid=(maker, reviewer), job_id=k['id'])
         _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
         v = _qa(rev['output']) if rev['ok'] else None
+        if rev.get('provider') in (maker, reviewer):
+            return ('FAIL', 'İkinci denetçi ilk denetçi veya kod yazanla aynı')
         if not v or v[0] != 'PASS':
-            return ('FAIL', '2. denetçi: ' + (v[1] if v else 'geçersiz yanıt'))[:240]
+            return ('FAIL', ('2. denetçi: ' + (v[1] if v else 'geçersiz yanıt'))[:240])
     for d in _hooks('paket_sonrasi', path):
         prompt = (d['prompt'] + '\n' + _lessons_text(d['key'], path) +
                   f"Paket: {k['title']} — {k['detail'][:400]}\nDeğişiklikler (VERİ):\n{_diff(folder, 5000)}\n"
@@ -712,8 +779,12 @@ def answer(qid, answer_text, path=None):
         if not q:
             raise KeyError('Açık soru bulunamadı')
         q = dict(q)
+        if q['kind'] == 'stuck' and str(answer_text).startswith('Bu paketin değişikliklerini'):
+            raise ValueError('Tehlikeli git reset/clean işlemi kaldırıldı; kaynak dosyaların korunuyor.')
         db.execute('UPDATE questions SET status="cevaplandi", answer=? WHERE id=?', (_clean(answer_text, 600), qid))
     pid, kid, a = q['product_id'], q['package_id'], str(answer_text)
+    if q['kind'] == 'stuck' and a.startswith('Bu paketin değişikliklerini'):
+        raise ValueError('Otomatik git reset/clean veri silebilir. Bu seçenek kaldırıldı; yalnızca güvenli kopyayı elle incele.')
     p = get(pid, path)
     resume = True
     if q['kind'] == 'budget':
@@ -733,14 +804,10 @@ def answer(qid, answer_text, path=None):
     elif q['kind'] == 'stuck':
         if a.startswith('Güçlü'):
             _pkg(kid, path, status='duzeltme', strong=1)
-        elif a.startswith('Bu paketin değişikliklerini'):
-            folder = Path(p['folder'])
-            if not _inside_company(folder):
-                _git(folder, 'reset', '-q', '--hard', 'HEAD')
-                _git(folder, 'clean', '-q', '-fd', '-e', '.studio')
-            _pkg(kid, path, status='atlandi', findings='Patron: değişiklikler geri alındı')
         else:
             _pkg(kid, path, status='atlandi', findings='Patron atladı')
+    elif q['kind'] == 'qa':
+        _pkg(kid, path, status='duzeltme')  # explicit owner action after installing a second provider
     elif q['kind'] == 'ai':
         k = next((x for x in p['packages'] if x['id'] == kid), None)
         if k:

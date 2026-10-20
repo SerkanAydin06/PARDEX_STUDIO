@@ -129,6 +129,12 @@ class HookTests(Base):
                 return {'ok': True, 'output': 'KILAVUZ: oklarla oyna', 'provider': 'Claude', 'model': 'haiku', 'effort': '', 'reason': ''}
             if role == 'review':
                 reviews.append(kw.get('avoid'))
+                result = base(role, prompt, cwd, dept, **kw)
+                # FakeAI normally always impersonates Gemini. The second
+                # independent reviewer must actually be a THIRD provider.
+                if 'Gemini' in (kw.get('avoid') or ()):
+                    result['provider'] = 'Claude'
+                return result
             return base(role, prompt, cwd, dept, **kw)
         p = self.run_line(ai)
         self.assertEqual(p['stage'], 'teslim')

@@ -11,7 +11,7 @@ import hq_store as store
 # Requests the company refuses: cheating, anti-cheat bypass, ToS evasion, fake accounts, spam.
 FORBIDDEN = re.compile(
     r'\b(hile|cheat|aimbot|wallhack|anti[- ]?cheat|bypass|bot ?farm|sahte hesap|fake account|'
-    r'çoklu hesap|multi[- ]?account|crack|keygen|korsan|spam|dolandır|phishing|ddos)\w*', re.I)
+    r'çoklu hesap|multi[- ]?account|crack|keygen|korsan\s+(?:yazılım|film|içerik|indir)|spam|dolandır|phishing|ddos)\w*', re.I)
 
 # (dept, keywords, kind, tier, calls, risk, action, title template)
 RULES = [

@@ -71,7 +71,9 @@ def choose(role, avoid=(), path=None, have=None):
         return override['provider'], override['model'], override['effort'], 'Patronun yönlendirme ayarı'
     cands = [c for c in ROLES[role] if c[0] in have and c[0] not in avoid]
     if not cands:
-        cands = [c for c in ROLES[role] if c[0] in have]  # independence impossible: say so in reason
+        if role == 'review' and avoid:
+            raise RuntimeError('Bağımsız kalite denetçisi yok; farklı bir AI sağlayıcısı kurulmalı')
+        cands = [c for c in ROLES[role] if c[0] in have]
         if not cands:
             raise RuntimeError('Kullanılabilir AI CLI yok (Claude Code, Codex veya Gemini CLI kur ve giriş yap)')
         if avoid:

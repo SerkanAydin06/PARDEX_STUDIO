@@ -3,10 +3,13 @@
 An idea is kept only if it cites at least two reachable sources on different websites.
 Paid tools/memberships are only *recommended* to the owner with a source and a price note — never bought.
 """
+import http.client
+import ipaddress
 import json
 import re
+import socket
+import ssl
 import urllib.parse
-import urllib.request
 
 import core
 import hq_router as router
@@ -30,18 +33,64 @@ def _domain(url):
     return '.'.join(parts[-2:]) if len(parts) >= 2 else host
 
 
+def _public_ips(host):
+    """Resolve every address and fail closed on any private/local result."""
+    try:
+        answers = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        ips = list(dict.fromkeys(item[4][0] for item in answers))
+        if not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
+            return []
+        return ips
+    except (OSError, ValueError):
+        return []
+
+
 def reachable(url, timeout=7):
-    """K0 check that a cited page exists (HEAD, then a tiny GET)."""
-    if not re.fullmatch(r'https?://[^\s<>"]{4,300}', url or ''):
+    """Pin a public HTTPS IP; never follow redirects into local/private networks.
+
+    No urllib redirect handler: the validated IP is also the IP dialed. TLS
+    certificate verification and SNI still use the original hostname.
+    """
+    try:
+        if not isinstance(url, str) or len(url) > 300:
+            return False
+        u = urllib.parse.urlsplit(url)
+        if (u.scheme != 'https' or not u.hostname or u.username is not None or
+                u.password is not None or u.port not in (None, 443) or
+                u.fragment or u.hostname.endswith(('.local', '.internal', '.localhost'))):
+            return False
+        host = u.hostname.encode('idna').decode('ascii')
+        if not re.fullmatch(r'[a-zA-Z0-9.-]{4,253}', host) or '.' not in host:
+            return False
+    except (ValueError, UnicodeError, AttributeError):
         return False
-    for method in ('HEAD', 'GET'):
-        try:
-            req = urllib.request.Request(url, method=method, headers={'User-Agent': 'PARDEX-ArGe/1.0'})
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                if r.status < 400:
+    ips = _public_ips(host)
+    if not ips:
+        return False
+    route = urllib.parse.urlunsplit(('', '', u.path or '/', u.query, ''))
+    for ip in ips[:2]:
+        for method in ('HEAD', 'GET'):
+            raw = tls = conn = None
+            try:
+                raw = socket.create_connection((ip, 443), timeout=timeout)
+                tls = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+                conn = http.client.HTTPConnection(host, 443, timeout=timeout)
+                conn.sock = tls  # validated public address, no second DNS lookup
+                conn.request(method, route, headers={'Host': host, 'User-Agent': 'PARDEX-ArGe/1.0'})
+                response = conn.getresponse()
+                if 200 <= response.status < 300:
                     return True
-        except Exception:
-            continue
+                if response.status not in (405, 501):
+                    break  # redirects are NOT followed (possible SSRF)
+            except (OSError, ValueError, ssl.SSLError, http.client.HTTPException):
+                break
+            finally:
+                if conn is not None:
+                    conn.close()
+                elif tls is not None:
+                    tls.close()
+                elif raw is not None:
+                    raw.close()
     return False
 
 
