@@ -1,7 +1,9 @@
 """PARDEX single-goal delivery window: owner starts one native CLI, reviews diff."""
 from __future__ import annotations
 
+import argparse
 import queue
+import shutil
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -9,15 +11,16 @@ from tkinter import filedialog, messagebox, ttk
 import change_review
 import core
 import project_delivery
+import quick_demo
 
 
 class DeliveryConsole(tk.Tk):
-    def __init__(self):
+    def __init__(self, project_path=""):
         super().__init__()
         self.title('PARDEX • Tek Görev Teslimi')
         self.geometry('870x690')
         self.minsize(700, 580)
-        self.project = tk.StringVar()
+        self.project = tk.StringVar(value=project_path)
         self.goal = tk.StringVar(value='Oyuncuya ok tuşlarıyla hareket etme özelliği ekle')
         self.files = tk.StringVar(value='scripts/player.gd')
         self.provider = tk.StringVar(value='Codex')
@@ -36,6 +39,10 @@ class DeliveryConsole(tk.Tk):
         ttk.Label(project_row, text='Oyun / uygulama klasörü:', width=25).pack(side='left')
         ttk.Entry(project_row, textvariable=self.project).pack(side='left', fill='x', expand=True)
         ttk.Button(project_row, text='Seç', command=self._browse).pack(side='left', padx=5)
+        quick = ttk.Frame(frame)
+        quick.pack(fill='x', pady=4)
+        ttk.Button(quick, text='AI ve Godot kontrolü', command=self._check_tools).pack(side='left', padx=(0, 8))
+        ttk.Button(quick, text='Deneme Godot oyunu oluştur', command=self._create_demo).pack(side='left')
         self._entry(frame, 'Yapılacak tek somut görev:', self.goal)
         self._entry(frame, 'Değiştirilebilecek dosyalar (virgülle):', self.files)
         chooser = ttk.Frame(frame)
@@ -72,6 +79,32 @@ class DeliveryConsole(tk.Tk):
     def _browse(self):
         folder = filedialog.askdirectory(title='Godot / uygulama proje klasörü')
         if folder: self.project.set(folder)
+
+    def _check_tools(self):
+        godot = core.find_godot()
+        self._append('Godot: ' + ('bulundu' if godot else 'BULUNAMADI — motor testi yapılamaz'))
+        for provider in ('Codex', 'Claude', 'Gemini'):
+            binary = core.which(provider.lower())
+            self._append(provider + ': ' + ('bulundu' if binary else 'BULUNAMADI — AI görevi çalıştırılamaz'))
+        self._append('Yalnızca kurulum kontrolü yapıldı; AI çağrısı ve ücretlendirme yok.')
+
+    def _create_demo(self):
+        parent = filedialog.askdirectory(title='Deneme oyunu hangi klasörde oluşturulsun?')
+        if not parent:
+            return
+        if not messagebox.askyesno('Deneme projesini oluştur',
+            'PARDEX_Deneme_Oyunu adlı yeni Godot 4 klasörü oluşturulacak. Mevcut dosyaların üzerine yazılmaz. Devam?'):
+            return
+        try:
+            folder = quick_demo.create(parent, owner_confirms=True)
+            self.project.set(folder)
+            self.files.set('scripts/player.gd')
+            self.goal.set('Geminin hareket hizini iki katina cikar')
+            self._append('Deneme projesi oluşturuldu: ' + folder)
+            self._append('Bu oyun şablonu AI tarafından oluşturulmadı. Godot ile açıp kontrol edebilirsin.')
+            self.status.config(text='Deneme projesi hazır. AI ve Godot kontrolünü çalıştır.')
+        except Exception as exc:
+            messagebox.showerror('Deneme projesi', str(exc))
 
     def _filenames(self):
         return [x.strip().replace('\\', '/') for x in self.files.get().split(',') if x.strip()]
@@ -185,4 +218,7 @@ class DeliveryConsole(tk.Tk):
 
 
 if __name__ == '__main__':
-    DeliveryConsole().mainloop()
+    parser = argparse.ArgumentParser(description='PARDEX tek gorev teslim penceresi')
+    parser.add_argument('--project', default='', help='Mevcut proje klasoru')
+    args = parser.parse_args()
+    DeliveryConsole(project_path=args.project).mainloop()
