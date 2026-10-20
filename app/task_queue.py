@@ -155,6 +155,12 @@ def cancel(ident,path=None):
 
 
 def accept(ident,path=None):
+    import quality_manager
+    with _conn(path) as c:
+        quality_manager._schema(c)
+        found=c.execute('SELECT verdict FROM quality_reviews WHERE review_task_id=?',(ident,)).fetchone()
+        if found and found['verdict']!='PASS':
+            raise ValueError('Independent QA PASS evidence required before acceptance')
     return _transition(ident,('awaiting-acceptance',),'accepted','owner-accepted',
                        path=path,fields={'ended_at':core.now()},metric={'owner_review':'accepted'})
 
@@ -244,9 +250,15 @@ def execute_one(day_limit=8,path=None,on_update=None):
             item['provider_preference'],item['quality'],day_limit,item['max_minutes'],
             on_update=on_update,context_note=handoff)
         good=bool(outcome.get('ai_ok') and outcome.get('verified'))
+        import quality_manager
+        qa=quality_manager.evaluate_review(item['id'],outcome,path)
+        if qa is not None:
+            good=good and qa['passed']
         status='awaiting-acceptance' if good else 'needs-attention'
-        note=('Test gecti; insanin oynanis/UI kabul testi bekleniyor' if good else
-              'AI/test basarisiz veya motor test edilemedi; sahibi incelemeli')
+        note=('Yerel test ve bagimsiz QA iddiasi gecti; sahip kabulunu bekliyor'
+              if good and qa is not None else
+              'Test gecti; insanin oynanis/UI kabul testi bekleniyor' if good else
+              'QA delili eksik, sorunlu ya da AI/motor testi basarisiz; sahibi incelemeli')
         fields={'ended_at':core.now(),'result_note':note,
                 'provider_used':str(outcome.get('provider',''))[:20],
                 'model_used':str(outcome.get('model',''))[:60],
@@ -256,7 +268,8 @@ def execute_one(day_limit=8,path=None,on_update=None):
         reported_provider=outcome.get('provider')
         safe_provider=reported_provider if reported_provider in ('Claude','Codex','Gemini') else default_provider
         safe_model=core.redact_log_output(str(outcome.get('model') or default_model))[:60]
-        code='verified' if good else ('ai_failed' if not outcome.get('ai_ok') else 'test_failed')
+        code='verified' if good else ('qa_failed' if qa is not None and outcome.get('ai_ok') and outcome.get('verified')
+                else 'ai_failed' if not outcome.get('ai_ok') else 'test_failed')
         telemetry={'elapsed_seconds':max(0.,time.monotonic()-start_clock),
                    'ai_ok':int(bool(outcome.get('ai_ok'))),
                    'verified':int(bool(outcome.get('verified'))),

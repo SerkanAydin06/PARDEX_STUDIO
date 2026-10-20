@@ -48,3 +48,11 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - Never invent exact subscription tokens, costs, model prices or percentages of savings.
 - No provider self-switching, AI-initiated approval, auto-retry or unreviewed software publication.
 - Use small, owner-approved pilot experiments when sufficient actual reviewed observations exist.
+
+
+### 2D — Bağımsız QA ve A/B kıyas kuralları
+- Üreten AI kendisini bağımsız reviewer diye onaylayamaz. Gerçek CLI provider farklı olmalı.
+- İnceleme yalnızca final `PARDEX_QA_VERDICT=PASS|FAIL` + `PARDEX_QA_FINDINGS=` satırlarıyla delil bildirir; PASS tek başına kalite sertifikası değildir. Kullanıcı kabulü gereklidir.
+- Test sonucu, AI CLI başarısı ve kullanıcının onayı ayrı kaydedilir. FAIL ve kanıtsız inceleme onay kuyruğunu geçemez.
+- A/B karşılaştırmada aynı görev metni, aynı motor/test profili ve farklı izole proje kopyaları gerekir. En az 3 eşleştirilmiş çift olmadan iddia üretme. Tek başına 3 çift de istatistiksel kesinlik değildir.
+- İzin olmadan ek AI çalıştırma, modeli değiştirme, para harcama veya yayın yapma.
