@@ -31,6 +31,7 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 ## Modül haritası
 - `app/core.py`: proje, görev, motor ve araç akışı
 - `app/gui.py`: masaüstü kullanıcı arayüzü
+- `app/task_queue.py`: yerel onaylı görev kuyruğu; arka planda otonom çalışan bir servis değildir.
 - `app/brain.py`, `app/evolution.py`: hata hafızası, konsey, çekirdek iyileştirme
 - `app/company.py`: AI şirket/kurul işleri
 - `templates/ci`: oyun depolarına kurulabilen test/radar şablonları
