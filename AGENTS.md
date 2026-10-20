@@ -38,3 +38,6 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - `.github/workflows`: yalnızca bu çekirdeğin otomasyonları
 
 Öncelik listesi `docs/ROADMAP.md` içindedir. Henüz gerçekleşmemiş yeteneği tamamlandı diye yazma.
+
+- `app/general_manager.py`: AI çağrısız küçük görev planları ve proje bazlı kabul kapıları; bir arka plan botu değildir.
+- `app/task_queue.py`: Yeni bağımlılık grafiği, kabul edilmeden sonraki görevi çalıştırmama, sınırlı veri devri.

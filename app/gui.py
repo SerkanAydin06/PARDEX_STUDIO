@@ -13,6 +13,7 @@ import brain
 import evolution
 import company
 import task_queue
+import general_manager
 
 BG='#0c1220'; PANEL='#172236'; PANEL2='#202e46'; FG='#ebf2ff'; SUB='#aebdd7'; BLUE='#628eea'; GREEN='#60d4ac'
 
@@ -48,6 +49,8 @@ class Studio(tk.Tk):
         self.v_rec=tk.StringVar(value='')
         self.v_queue_id=tk.StringVar(value='')
         self.v_queue_priority=tk.IntVar(value=3)
+        self.v_manager_risk=tk.StringVar(value='Normal')
+        self.v_manager_priority=tk.IntVar(value=3)
         self._style()
         self._layout()
         self.refresh()
@@ -122,13 +125,13 @@ class Studio(tk.Tk):
         self.lbl(self,textvariable=self.v_proj,style='Dim.TLabel').pack(anchor='w',padx=25)
         self.tabs=ttk.Notebook(self)
         self.p_home=ttk.Frame(self.tabs,padding=16);self.p_proj=ttk.Frame(self.tabs,padding=16)
-        self.p_agent=ttk.Frame(self.tabs,padding=16);self.p_queue=ttk.Frame(self.tabs,padding=16);self.p_test=ttk.Frame(self.tabs,padding=16)
+        self.p_agent=ttk.Frame(self.tabs,padding=16);self.p_queue=ttk.Frame(self.tabs,padding=16);self.p_manager=ttk.Frame(self.tabs,padding=16);self.p_test=ttk.Frame(self.tabs,padding=16)
         self.p_assets=ttk.Frame(self.tabs,padding=16);self.p_git=ttk.Frame(self.tabs,padding=16)
         self.p_sys=ttk.Frame(self.tabs,padding=16)
         self.p_council=ttk.Frame(self.tabs,padding=16)
         self.p_radar=ttk.Frame(self.tabs,padding=16)
         self.p_company=ttk.Frame(self.tabs,padding=16)
-        for tab,title in [(self.p_home,'Başlangıç'),(self.p_proj,'Projeler'),(self.p_agent,'AI Ekibi'),(self.p_queue,'Gorev Merkezi'),
+        for tab,title in [(self.p_home,'Başlangıç'),(self.p_proj,'Projeler'),(self.p_agent,'AI Ekibi'),(self.p_manager,'AI Genel Müdür'),(self.p_queue,'Gorev Merkezi'),
                 (self.p_test,'Test & Öğrenme'),(self.p_company,'AI Şirketi'),(self.p_council,'Çekirdek Konseyi'),(self.p_radar,'İnternet Radarı'),(self.p_assets,'Görsel Atölyesi'),(self.p_git,'GitHub'),(self.p_sys,'Sistem')]:
             self.tabs.add(tab,text=title)
         foot=ttk.Frame(self);foot.pack(side='bottom',fill='x',padx=24,pady=(0,12))
@@ -136,7 +139,7 @@ class Studio(tk.Tk):
         self.console=tk.Text(foot,height=6,bg=PANEL,fg=SUB,font=('Consolas',9),state='disabled',bd=0,padx=8)
         self.console.pack(fill='x')
         self.tabs.pack(fill='both',expand=True,padx=17,pady=(12,6))
-        self._home();self._projects();self._agents();self._queue_tab();self._testing();self._company();self._council();self._radar();self._assets();self._github();self._system()
+        self._home();self._projects();self._agents();self._manager_tab();self._queue_tab();self._testing();self._company();self._council();self._radar();self._assets();self._github();self._system()
 
     def _home(self):
         p=self._inner(self.p_home)
@@ -513,6 +516,79 @@ class Studio(tk.Tk):
         self.btn(row3,'Olculen AI verimliligi',self.show_performance)
         self.count_label=self.lbl(p,'','Dim.TLabel');self.count_label.pack(anchor='w')
         self.hint(p,'İlgili AI hesabında giriş gerekli. Dosya değişikliği yapılmadan önce yedek veya Git kontrol noktası önerilir. İşlem başarısızsa otomatik sonsuz tekrar yapılmaz.')
+
+    def _manager_tab(self):
+        p=self._inner(self.p_manager)
+        self.header(p,'AI Genel Müdür — İş Dağıtımı',
+            'Önce ücretsiz planı incele. Görevler açık onay olmadan çalışmaz.')
+        self.lbl(p,'İş hedefini yaz','H2.TLabel').pack(anchor='w',pady=5)
+        self.manager_goal=self.text(p,4)
+        row=ttk.Frame(p);row.pack(anchor='w',pady=8)
+        self.lbl(row,'Risk:').pack(side='left',padx=(0,8))
+        ttk.Combobox(row,textvariable=self.v_manager_risk,values=list(general_manager.RISKS),
+                     width=16,state='readonly').pack(side='left',padx=(0,15))
+        self.lbl(row,'Öncelik:').pack(side='left')
+        ttk.Spinbox(row,from_=1,to=5,width=5,textvariable=self.v_manager_priority).pack(side='left',padx=8)
+        row=ttk.Frame(p);row.pack(anchor='w',pady=6)
+        self.btn(row,'Ücretsiz plan önizle',self.manager_preview)
+        self.btn(row,'Görevleri kuyruğa ekle',self.manager_create)
+        self.btn(row,'Görev Merkezi',lambda:self.tabs.select(self.p_queue))
+        self.manager_list=ttk.Treeview(p,columns=('goal','risk','status','calls'),show='headings',height=8)
+        for key,label,w in [('goal','Hedef',440),('risk','Risk',80),('status','Durum',130),('calls','Çağrı',80)]:
+            self.manager_list.heading(key,text=label)
+            self.manager_list.column(key,width=w,stretch=(key=='goal'))
+        self.manager_list.pack(fill='x',pady=8)
+        self.manager_list.bind('<<TreeviewSelect>>',self.manager_select)
+        self.btn(p,'Planları yenile',self.manager_refresh)
+        self.manager_info=self.lbl(p,'','Dim.TLabel');self.manager_info.pack(anchor='w',pady=6)
+        self.hint(p,'Basit: 1 AI. Normal: kod + bağımsız inceleme. Kritik: plan + kod + inceleme. '
+                 'Tahmini çağrı sayısı gerçek abonelik token kotası değildir.')
+        self.manager_refresh()
+
+    def manager_preview(self):
+        p=self.active()
+        if not p:return
+        try:
+            d=general_manager.preview(p,self.manager_goal.get('1.0','end'),self.v_manager_risk.get())
+            steps='\n'.join(f"{n+1}. {x['department']} / {x['provider']}: {x['max_minutes']} dk"
+                            for n,x in enumerate(d['steps']))
+            messagebox.showinfo('AI Genel Müdür',steps+f"\n\nEn fazla {d['max_cli_calls']} AI çağrısı, "
+                                f"{d['max_total_minutes']} dakika. Önizleme AI kullanmaz.")
+        except Exception as e:messagebox.showerror('Önizleme hatası',str(e))
+
+    def manager_create(self):
+        p=self.active()
+        if not p:return
+        try:
+            goal=self.manager_goal.get('1.0','end')
+            d=general_manager.preview(p,goal,self.v_manager_risk.get())
+            if not messagebox.askyesno('AI görev onayı',
+                f"{d['max_cli_calls']} görev kuyruğa eklensin mi?\n"
+                "AI çağrısı, yayınlama ve satın alma yapılmayacak."):return
+            plan=general_manager.create(p,goal,self.v_manager_risk.get(),int(self.v_manager_priority.get()))
+            self.manager_refresh();self.queue_refresh()
+            self.log('AI Genel Müdür planı: '+plan['id'])
+            messagebox.showinfo('Hazır','Görev Merkezi sekmesinde her aşamayı ayrı onaylayabilirsin.')
+        except Exception as e:messagebox.showerror('Plan hatası',str(e))
+
+    def manager_refresh(self):
+        if not hasattr(self,'manager_list'):return
+        for row in self.manager_list.get_children():self.manager_list.delete(row)
+        for p in general_manager.list_plans():
+            self.manager_list.insert('','end',iid=p['id'],values=(
+                p['goal'][:110],p['risk'],p['status'],p['invocations_observed']))
+        self.manager_info.configure(text=f"Plan sayısı: {len(self.manager_list.get_children())}")
+
+    def manager_select(self,_event=None):
+        selection=self.manager_list.selection()
+        if not selection:return
+        try:
+            plan=general_manager.get(selection[0])
+            info='\n'.join(f"{i+1}. {task['kind']} — {task['status']}"
+                        + (' / öncül kabulü bekleniyor' if task['waiting_for'] else '')
+                        for i,task in enumerate(plan['tasks']))
+            self.manager_info.configure(text=info)
+        except Exception as e:self.manager_info.configure(text=str(e))
 
     def _queue_tab(self):
         p=self._inner(self.p_queue)

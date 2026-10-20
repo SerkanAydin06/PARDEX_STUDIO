@@ -31,6 +31,13 @@ def _conn(path=None):
     db.execute('''CREATE TABLE IF NOT EXISTS task_events(
         id INTEGER PRIMARY KEY AUTOINCREMENT,task_id TEXT NOT NULL,time TEXT NOT NULL,
         action TEXT NOT NULL,note TEXT NOT NULL DEFAULT '')''')
+    db.execute('''CREATE TABLE IF NOT EXISTS task_dependencies (
+        task_id TEXT NOT NULL, prerequisite_id TEXT NOT NULL,
+        PRIMARY KEY(task_id,prerequisite_id)
+    )''')
+    db.execute('CREATE INDEX IF NOT EXISTS task_dependency_source ON task_dependencies(prerequisite_id)')
+    if 'handoff_note' not in {row[1] for row in db.execute('PRAGMA table_info(tasks)')}:
+        db.execute("ALTER TABLE tasks ADD COLUMN handoff_note TEXT NOT NULL DEFAULT ''")
     db.execute('CREATE INDEX IF NOT EXISTS task_status_priority ON tasks(status,priority DESC,created_at)')
     try:
         yield db
@@ -54,7 +61,7 @@ def _row(db,ident):
 
 
 def add_task(project,title,kind='Yeni ozellik / Kod',provider='Otomatik',
-             quality='Dengeli',priority=3,max_minutes=15,path=None):
+             quality='Dengeli',priority=3,max_minutes=15,path=None,depends_on=()):
     project=Path(project).expanduser().resolve()
     if not project.is_dir() or core.project_type(project)=='unknown':
         raise ValueError('Taninan bir proje gerekli')
@@ -64,13 +71,22 @@ def add_task(project,title,kind='Yeni ozellik / Kod',provider='Otomatik',
         raise ValueError('Bilinmeyen gorev/AI/kalite')
     if type(priority) is not int or not 1<=priority<=5:raise ValueError('Oncelik 1-5 olmali')
     if type(max_minutes) is not int or not 2<=max_minutes<=45:raise ValueError('Sure 2-45 dk olmali')
+    depends_on=tuple(depends_on)
+    if len(depends_on)>5 or len(set(depends_on))!=len(depends_on) or not all(isinstance(x,str) for x in depends_on):
+        raise ValueError('Bagimlilik listesi gecersiz')
     ident='TASK-'+uuid.uuid4().hex[:12]
     with _conn(path) as db:
         db.execute('BEGIN IMMEDIATE')
+        for prerequisite in depends_on:
+            dep=db.execute('SELECT project FROM tasks WHERE id=?',(prerequisite,)).fetchone()
+            if not dep or dep['project']!=str(project):
+                raise ValueError('Bagimlilik sadece ayni projenin mevcut gorevini gosterebilir')
         db.execute('''INSERT INTO tasks(id,project,title,kind,provider_preference,quality,priority,
              max_minutes,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
              (ident,str(project),core.redact_log_output(title),kind,provider,quality,priority,
               max_minutes,'pending-owner',core.now(),core.now()))
+        for prerequisite in depends_on:
+            db.execute('INSERT INTO task_dependencies(task_id,prerequisite_id) VALUES (?,?)',(ident,prerequisite))
         _event(db,ident,'created','owner permission required')
         db.commit()
     return get_task(ident,path)
@@ -138,12 +154,28 @@ def reset_for_manual_retry(ident,path=None):
                        path=path,fields={'approved_at':None,'started_at':None})
 
 
+_ELIGIBLE = """tasks.status='ready' AND NOT EXISTS (
+    SELECT 1 FROM task_dependencies AS dep
+    LEFT JOIN tasks AS prerequisite ON prerequisite.id=dep.prerequisite_id
+    WHERE dep.task_id=tasks.id AND (prerequisite.status IS NULL OR prerequisite.status!='accepted')
+)"""
+
+
+def dependencies(ident,path=None):
+    with _conn(path) as db:
+        _row(db,ident)
+        return [dict(row) for row in db.execute('''SELECT p.* FROM task_dependencies d
+            JOIN tasks p ON p.id=d.prerequisite_id
+            WHERE d.task_id=? ORDER BY p.created_at,p.rowid''',(ident,))]
+
+
 def preview_next(day_limit=8,path=None):
     """Zero AI call; a routing estimate, not a real subscription quota."""
     with _conn(path) as db:
-        row=db.execute('SELECT * FROM tasks WHERE status="ready" ORDER BY priority DESC,rowid ASC LIMIT 1').fetchone()
+        row=db.execute('SELECT * FROM tasks WHERE '+_ELIGIBLE+' ORDER BY priority DESC,rowid ASC LIMIT 1').fetchone()
         running=db.execute('SELECT count(*) FROM tasks WHERE status="running"').fetchone()[0]
-    if not row:return {'ready':False,'message':'Onayli gorev yok'}
+        blocked=db.execute('SELECT count(*) FROM tasks WHERE status="ready"').fetchone()[0]
+    if not row:return {'ready':False,'message':'Bagimli gorevler onceki asama kabulunu bekliyor' if blocked else 'Onayli gorev yok'}
     item=dict(row)
     provider,model=core.route(item['kind'],item['provider_preference'],item['quality'])
     exe={'Claude':'claude','Codex':'codex','Gemini':'gemini'}[provider]
@@ -162,7 +194,7 @@ def claim_next(day_limit=8,path=None):
         db.execute('BEGIN IMMEDIATE')
         if db.execute('SELECT 1 FROM tasks WHERE status="running" LIMIT 1').fetchone():
             raise RuntimeError('Zaten bir AI gorevi calisiyor veya kurtarma bekliyor')
-        row=db.execute('SELECT * FROM tasks WHERE status="ready" ORDER BY priority DESC,rowid ASC LIMIT 1').fetchone()
+        row=db.execute('SELECT * FROM tasks WHERE '+_ELIGIBLE+' ORDER BY priority DESC,rowid ASC LIMIT 1').fetchone()
         if row is None:return None
         if core.usage_count()>=day_limit:raise RuntimeError('Gunluk AI cagri limiti doldu')
         row=dict(row)
@@ -182,8 +214,13 @@ def execute_one(day_limit=8,path=None,on_update=None):
     item=claim_next(day_limit,path)
     if item is None:return None
     try:
+        prior=dependencies(item['id'],path)
+        if any(p['status']!='accepted' for p in prior):
+            raise RuntimeError('Bagimlilik henuz kabul edilmedi')
+        handoff='\n'.join(str(p.get('handoff_note',''))[:650] for p in prior)[:1200]
         outcome=core.run_ai_task(item['project'],item['kind'],item['title'],
-            item['provider_preference'],item['quality'],day_limit,item['max_minutes'],on_update=on_update)
+            item['provider_preference'],item['quality'],day_limit,item['max_minutes'],
+            on_update=on_update,context_note=handoff)
         good=bool(outcome.get('ai_ok') and outcome.get('verified'))
         status='awaiting-acceptance' if good else 'needs-attention'
         note=('Test gecti; insanin oynanis/UI kabul testi bekleniyor' if good else
@@ -191,7 +228,8 @@ def execute_one(day_limit=8,path=None,on_update=None):
         fields={'ended_at':core.now(),'result_note':note,
                 'provider_used':str(outcome.get('provider',''))[:20],
                 'model_used':str(outcome.get('model',''))[:60],
-                'verified':int(bool(outcome.get('verified')))}
+                'verified':int(bool(outcome.get('verified'))),
+                'handoff_note':core.redact_log_output(str(outcome.get('output','')))[:650] if good else ''}
         return _transition(item['id'],('running',),status,'finished',note,path,fields=fields)
     except Exception as err:
         note='Gorev durdu: '+type(err).__name__+' — '+core.redact_log_output(str(err))[:220]
