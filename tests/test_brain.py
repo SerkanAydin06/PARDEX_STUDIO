@@ -234,21 +234,19 @@ class BrainTests(unittest.TestCase):
   self.assertEqual(result['exit'],126)
   fake_run.assert_not_called()
 
- def test_isolated_runner_disables_network_and_mutation(self):
+ def test_isolated_runner_needs_owner_and_staged_workspace(self):
   candidate=evolution.create_candidate('Izole test komutunu bagimsiz denetle')
-  seen=[]
-  def fake_run(args,cwd,**kwargs):
-   seen.append(args)
-   return subprocess.CompletedProcess(args,0,'OK')
-  with mock.patch.object(core,'which',return_value='/usr/bin/docker'),\
-       mock.patch.object(core,'run',side_effect=fake_run):
-   result=evolution.run_isolated_regression(candidate)
-  self.assertEqual(result.returncode,0)
-  self.assertEqual(len(seen),2)
-  self.assertIn('--network',seen[-1]);self.assertIn('none',seen[-1])
-  self.assertIn('--read-only',seen[-1]);self.assertIn('--cap-drop',seen[-1])
-  self.assertIn('--pull=never',seen[-1])
-  self.assertTrue(any(str(a).endswith(',target=/work,readonly') for a in seen[-1]))
+  with mock.patch.object(core,'run') as fake_run:
+   denied=evolution.run_isolated_regression(candidate)
+  self.assertEqual(denied.returncode,126)
+  fake_run.assert_not_called()
+  with mock.patch('isolated_worker.run_python_regression',
+                  return_value={'exit_code':0,'output_tail':'OK'}) as worker:
+   allowed=evolution.run_isolated_regression(candidate,owner_confirms=True)
+  self.assertEqual(allowed.returncode,0)
+  worker.assert_called_once()
+  self.assertTrue(worker.call_args.kwargs['owner_confirms'])
+
 
  def test_settings_validation(self):
   with self.assertRaises(ValueError):brain.change_settings({'auto_council':'yes'})
