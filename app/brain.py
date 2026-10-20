@@ -191,7 +191,8 @@ def eligibility(proposal_id,home=None):
  if len(active['rules'].get(p['role'],[]))>=12:return False,'Talimat limiti doldu; sadeleştirme gerekli'
  return True,'Iki AI onayladi; iki projede kanit var; kurallar izin veriyor'
 
-def activate_rule(proposal_id,home=None):
+def activate_rule(proposal_id,home=None,*,owner_approved=False):
+ if owner_approved is not True:raise PermissionError('Cekirdek talimati icin sahibin son onayi gerekli')
  ok,why=eligibility(proposal_id,home)
  if not ok:raise ValueError('Otomatik guncelleme durduruldu: '+why)
  base=initialize(home);data=policy(home)
@@ -310,7 +311,7 @@ def radar_report(home=None):
  for title,error in data.get('errors',{}).items():out.append('• '+title+': kontrol edilemedi — '+error)
  return '\n'.join(out)
 
-DEFAULT_SETTINGS={'auto_council':False,'auto_text_policy':True,'max_ai_review_cycles_per_day':1,
+DEFAULT_SETTINGS={'auto_council':False,'auto_text_policy':False,'max_ai_review_cycles_per_day':1,
                   'min_distinct_projects':2,'enable_internet_check':False}
 
 def settings(home=None):
@@ -354,9 +355,8 @@ def auto_council_once(home=None,day_limit=8,report=None):
   if report:report(f'Cekirdek konsey: {index}/3 {provider} bagimsiz inceleme')
   model_review(item['id'],provider,home)
  valid,reason=eligibility(item['id'],home)
- if valid and conf['auto_text_policy']:
-  version=activate_rule(item['id'],home)
-  return {'status':'updated','version':version,'proposal':item['id'],'reason':reason}
+ # Even old user settings with auto_text_policy=True never bypass owner consent.
+ # This cycle may spend the permitted audit budget, but activation is explicit.
  return {'status':'proposed','proposal':item['id'],'reason':reason}
 
 def analyze_radar_with_ai(home=None,max_seconds=110):

@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Yapısal denetim (AI çağrısı yok)
-        run: python .studio/ci_check.py
+        run: python .github/scripts/ci_check.py
       - name: Godot 4.5.2 resmi headless binary
         if: hashFiles('project.godot') != ''
         run: |

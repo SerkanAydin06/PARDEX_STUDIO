@@ -36,7 +36,7 @@ class Studio(tk.Tk):
         self.v_proposal=tk.StringVar(value='')
         self.v_role=tk.StringVar(value='implementer')
         self.v_auto_council=tk.BooleanVar(value=False)
-        self.v_auto_text=tk.BooleanVar(value=True)
+        self.v_auto_text=tk.BooleanVar(value=False)
         self.v_candidate=tk.StringVar(value='')
         self.v_server=tk.StringVar(value='web')
         self.v_ollama_model=tk.StringVar(value='qwen3:4b')
@@ -170,8 +170,7 @@ class Studio(tk.Tk):
         self.lbl(p,'Kontrollü kendi kendine öğrenme','H2.TLabel').pack(anchor='w',pady=(12,4))
         ttk.Checkbutton(p,text='Görev hatasında, yeterli kanıt varsa AI denetimini kendisi başlatsın (kota tüketir)',
                         variable=self.v_auto_council,command=self.save_council_settings).pack(anchor='w',pady=3)
-        ttk.Checkbutton(p,text='İki AI, test ve 2 bağımsız proje kanıtıyla düşük riskli rol talimatını otomatik etkinleştir',
-                        variable=self.v_auto_text,command=self.save_council_settings).pack(anchor='w',pady=3)
+        self.hint(p,'Talimatlar iki AI onaylasa da sen etkinlestirene kadar sadece oneridir. Otomatik etkinlestirme devre disidir.')
         self.hint(p,'AI kodu, güvenlik ayarlarını ve GitHub hesaplarını izinsiz değiştirmez. Talimat değişiklikleri geçmişe alınabilir.')
         self.lbl(p,'Kendi çekirdek kodunu geliştirmek için güvenli deneme alanı','H2.TLabel').pack(anchor='w',pady=(14,4))
         self.core_goal=self.text(p,3)
@@ -203,7 +202,7 @@ class Studio(tk.Tk):
         evidence=brain.evidence_summary()
         st=brain.settings()
         self.v_auto_council.set(st['auto_council'])
-        self.v_auto_text.set(st['auto_text_policy'])
+        self.v_auto_text.set(False)
         current=brain.policy()
         self.council_stats.configure(text=f"Çekirdek politika v{current['version']} · {len(brain.list_projects())} proje · {evidence['failures']} hata kaydı · {evidence['affected_projects']} farklı projede hata")
         items=brain.proposals()
@@ -225,8 +224,7 @@ class Studio(tk.Tk):
         return val
 
     def save_council_settings(self):
-        brain.change_settings({'auto_council':self.v_auto_council.get(),
-                              'auto_text_policy':self.v_auto_text.get()})
+        brain.change_settings({'auto_council':self.v_auto_council.get(), 'auto_text_policy':False})
         self.log('Çekirdek AI konsey ayarları kaydedildi.')
 
     def propose_from_ai(self):
@@ -254,7 +252,7 @@ class Studio(tk.Tk):
             ident=self.selected_proposal();ok,why=brain.eligibility(ident)
             if not ok:raise ValueError(why)
             if not messagebox.askyesno('Çekirdek kuralını güncelle','İki farklı yapay zekâ tarafından onaylandı. Yeni sürüm kaydedilecek ve geri alma yedeği alınacak. Devam mı?'):return
-            version=brain.activate_rule(ident)
+            version=brain.activate_rule(ident,owner_approved=True)
             self.log('Çekirdek rol kuralları v'+str(version)+' oldu.');self.refresh_council()
         except Exception as e:messagebox.showerror('Etkinleştirilemedi',str(e))
 
@@ -308,7 +306,7 @@ class Studio(tk.Tk):
         if not messagebox.askyesno('ÖNEMLİ: Çekirdek kodu değişecek',
             'Bu işlem çalışan stüdyonun Python dosyalarını değiştirecek. Yalnızca tüm testleri ve iki AI incelemesini geçen denemeler uygulanabilir. Yerel yedek oluşturulur. Oyun depolarınız değiştirilmez.\n\nKurulum için gerçekten onaylıyor musun?'):return
         try:
-            info=evolution.install_approved_candidate(candidate)
+            info=evolution.install_approved_candidate(candidate,owner_approved=True)
             self.log('Onaylı çekirdek kuruldu: '+str(info))
             messagebox.showinfo('Kurulum tamam','Çekirdek güncellendi ve yedeklendi. Değişikliklerin yüklenmesi için stüdyoyu kapatıp yeniden aç.\nYedek: '+info['backup'])
         except Exception as e:messagebox.showerror('Kod kurulamadı',str(e))
@@ -751,6 +749,8 @@ class Studio(tk.Tk):
         if not messagebox.askyesno('GitHub özel depo oluşturma',f'Bu işlem gerçek GitHub hesabında ÖZEL depo oluşturacak ve proje dosyalarını gönderecek.\n\nProje: {p}\n\nSadece kendi dosyalarını GitHub\'a koymak istediğinden emin misin?'):return
         def worker():
             for cmd in [[core.which('gh'),'auth','status'],[core.which('git'),'init'],[core.which('git'),'add','.'],[core.which('git'),'commit','-m','Initial Ultra Pro Studio project'],[core.which('gh'),'repo','create',core.safe_name(p.name),'--private','--source','.','--remote','origin','--push']]:
+                if cmd[1] in ('commit','repo'):
+                    core.verify_git_publish_safe(p)
                 r=core.run(cmd,p,timeout=120)
                 self.log('$ '+' '.join(cmd[1:])+'\n'+r.stdout[-2000:])
                 if r.returncode:raise RuntimeError('GitHub yayinlama durdu. Logu incele, hicbir komut sessizce atlanmadi.')

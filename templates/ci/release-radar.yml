@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Gather public release metadata without secrets or AI
-        run: python .studio/ci_radar.py > studio-radar.txt
+        run: python .github/scripts/ci_radar.py > studio-radar.txt
       - uses: actions/upload-artifact@v4
         with:
           name: studio-radar

@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Haftalik yerel dosya denetimi, harici AI yok
-        run: python .studio/ci_check.py --report > studio-health.txt
+        run: python .github/scripts/ci_check.py --report > studio-health.txt
       - uses: actions/upload-artifact@v4
         with:
           name: studio-health-report

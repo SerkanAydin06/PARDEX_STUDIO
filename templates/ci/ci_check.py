@@ -1,20 +1,17 @@
 """Safe structural repository validator - intentionally no AI, network or secrets."""
 from pathlib import Path
 import argparse
-import json
 import sys
 
-root=Path(__file__).resolve().parent.parent
+root=Path(__file__).resolve().parents[2]
 p=argparse.ArgumentParser();p.add_argument('--report',action='store_true');a=p.parse_args()
 problems=[];notes=[]
-settings=root/'.studio'/'studio.json'
-if not settings.exists():problems.append('.studio/studio.json eksik')
-else:
-    try:
-        meta=json.loads(settings.read_text(encoding='utf-8'))
-        if meta.get('engine') not in ('godot','unity','unreal','flutter','android','web'):
-            problems.append('Tanimsiz proje motoru')
-    except (ValueError,OSError):problems.append('studio.json okunamiyor')
+# CI checks repository-visible files only; .studio is deliberately private.
+recognized=((root/'project.godot').exists() or bool(list(root.glob('*.uproject')))
+    or (root/'ProjectSettings'/'ProjectVersion.txt').exists() or (root/'pubspec.yaml').exists()
+    or (root/'settings.gradle').exists() or (root/'settings.gradle.kts').exists()
+    or (root/'package.json').exists() or (root/'index.html').exists())
+if not recognized:problems.append('Taninmis proje dosyasi bulunamadi')
 if (root/'project.godot').exists():
     notes.append('Godot algilandi; ayrica GitHub Actions headless Godot testi calistirilir.')
     if not (root/'scenes').is_dir():notes.append('scenes/ yok (bazı Godot projeleri için normal)')

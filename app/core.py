@@ -95,17 +95,24 @@ def setup_studio_files(folder, engine, name, description, overwrite=False):
     content={
        '.studio/studio.json': json.dumps({'name':name,'engine':engine,'created':now(),'policy':{'daily_ai_calls':8,'max_one_task_minutes':15,'review_on_quality':False}},ensure_ascii=False,indent=2)+'\n',
        '.studio/BRIEF.md':f'# {name}\n\nMotor: {engine}\n\n## Oyun veya uygulama fikri\n{description.strip() or "Kullanici henuz tanimlamadi."}\n\n## Kullanici kontrolleri\nHer onemli asamada oynanis/gorunus kontrolunu kullanici yapar.\n',
-       '.studio/.gitignore':'logs/\nbackups/\n*.local.json\n',
+       '.studio/.gitignore':'*\n',
        '.studio/TASKS.md':'# Gorevler\n\n- [ ] Ilk oynanabilir / kullanilabilir prototipi planla\n',
        '.studio/LESSONS.md':'# Dogrulanan dersler\n\nYalnizca gercek test sonuclarindan kisa ogrenimler kaydedilir.\n',
        '.studio/PROGRESS.md':'# Gelistirme gunlugu\n\n',
        '.studio/ASSET_REQUESTS.md':'# Gorsel uretim\n\n2D: ChatGPT / Gemini (uygulama arayuzleri)\n3D: Meshy.ai (arayuzden manuel uretim)\n',
        'AGENTS.md':'# AI Studio ortak kurallari\n\n- Once ilgili dosyalari oku, tum depoyu tekrar tekrar tarama.\n- Tek bir goreve odaklan, kucuk degisiklik yap.\n- API key, .env, token veya ozel kimlik bilgilerini okuma / yayma.\n- Koddan sonra yerel testleri calistir; sonucunu kisa yaz.\n- Buyuk degisiklik icin kullanici onayi al, basarisiz testte dur.\n- Mevcut kodu silme, otomatik push/deploy/yayinlama yapma.\n- Grafik/oynanis dogrulamasi icin kullaniciya adim ver.\n- Eski dersleri kullan ama dogrulanmamis bilgiyi ders olarak kaydetme.\n',
        'CLAUDE.md':'# Claude Code / Ultra Pro Studio\n\nOrtak kurallar: AGENTS.md. Gorevler: .studio/TASKS.md.\nPlan: kisa; uygulama: hedefli; test: zorunlu; kullanici onayi: kritik.\nVarsayilan model takma adi sonnet; opus yalnizca zorlu mimari icin kullanici secimiyle.\n',
-       '.gitignore': '## Ultra Pro Studio\n.studio/logs/\n.studio/*.local.json\n.env\n.env.*\n!.env.example\n'
+       '.gitignore': '## Ultra Pro Studio (private project memory)\n.studio/\n.env\n.env.*\n!.env.example\n'
     }
     for rel,body in content.items():
         out=p/rel
+        if rel=='.gitignore' and out.exists():
+            # Preserve existing ignore files and protect local project memory.
+            existing=out.read_text(encoding='utf-8')
+            if '.studio/' not in existing.splitlines():
+                with out.open('a',encoding='utf-8') as target:
+                    target.write(('' if existing.endswith('\n') else '\n')+'\n# PARDEX private local workspace\n.studio/\n')
+            continue
         if out.exists() and not overwrite: continue
         out.parent.mkdir(parents=True,exist_ok=True)
         if rel=='.gitignore' and out.exists() and overwrite:
@@ -167,6 +174,31 @@ def run(args,cwd,timeout=60,input_data=None,env=None):
         return subprocess.CompletedProcess(args,124, 'Zaman asimi ('+str(timeout)+'s). Islem durduruldu.')
     except OSError as e:
         return subprocess.CompletedProcess(args,127,'Program baslatilamadi: '+str(e))
+
+def redact_log_output(output):
+    """Redact common secrets from persisted AI output (defense in depth)."""
+    text=str(output)
+    text=re.sub(r'(?i)\b(ANTHROPIC_API_KEY|OPENAI_API_KEY|CODEX_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|OPENROUTER_API_KEY|GITHUB_TOKEN|GH_TOKEN|AWS_SECRET_ACCESS_KEY)\s*[:=]\s*[\"\']?[^\s\"\']+',r'\1=[REDACTED]',text)
+    text=re.sub(r'(?i)\b(Bearer\s+)\S+',r'\1[REDACTED]',text)
+    text=re.sub(r'\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|sk-[A-Za-z0-9_-]{16,})\b','[REDACTED_TOKEN]',text)
+    return text
+
+def verify_git_publish_safe(project):
+    """Fail closed if a private file was staged despite .gitignore."""
+    try:
+        r=subprocess.run([which('git') or 'git','diff','--cached','--name-only','-z'],
+            cwd=str(project),capture_output=True,timeout=15,check=False)
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('Git staged kontrolu baslatilamadi') from exc
+    if r.returncode or len(r.stdout)>2_000_000:
+        raise RuntimeError('Git staged kontrolu tamamlanamadi veya dosya listesi cok buyuk')
+    paths=[x.decode('utf-8','replace').replace('\\','/') for x in r.stdout.split(b'\0') if x]
+    secrets=[x for x in paths if x=='.studio' or x.startswith('.studio/') or '/.studio/' in '/'+x
+        or x=='.env' or x.startswith('.env.') or '/.env' in '/'+x
+        or x.startswith('secrets/') or '/secrets/' in '/'+x]
+    if secrets:
+        raise RuntimeError('Ozel dosyalar GitHub gonderiminden once takipten cikmali: '+', '.join(secrets[:8]))
+    return True
 
 def safe_env():
     env=os.environ.copy()
@@ -317,14 +349,14 @@ def run_ai_task(project,kind,description,provider_pref='Otomatik',quality='Denge
     if on_update: on_update(f'{provider} ({model}) baslatiliyor. En fazla {max_minutes} dakika.')
     record_usage(provider) # Counts invocations, NOT actual tokens. Even failed attempts consume local budget.
     result=run(cmd,project,timeout=int(max_minutes)*60,input_data=prompt if provider=='Codex' else None,env=safe_env())
-    output=result.stdout[-6500:]
+    output=redact_log_output(result.stdout[-6500:])
     # Do not claim CLI success implies code quality or completed implementation.
     if on_update: on_update('AI gorevi '+('tamamlandi' if result.returncode==0 else 'basarisiz')+'. Yerel dogrulama...')
     verified,test_report=validate(project,engine)
     good=(result.returncode==0 and verified)
     logdir=project/'.studio'/'logs'; logdir.mkdir(parents=True,exist_ok=True)
     filename=dt.datetime.now().strftime('%Y%m%d-%H%M%S')+'-'+provider.lower()+'.txt'
-    (logdir/filename).write_text(f'AI: {provider} ({model})\nDurum: {result.returncode}\n\n{output}\n\nTEST: {test_report}',encoding='utf-8')
+    (logdir/filename).write_text(redact_log_output(f'AI: {provider} ({model})\nDurum: {result.returncode}\n\n{output}\n\nTEST: {test_report}'),encoding='utf-8')
     learn(project,kind,description,good,test_report)
     try:
         import brain
@@ -355,11 +387,17 @@ def add_ci(project):
     outcomes=[]
     for name,src in files.items():
         p=dest/name
-        if p.exists(): outcomes.append(f'Zaten var, degismedi: {name}')
+        if p.exists():
+            outcomes.append(f'Zaten var, degismedi: {name}')
+            if '.studio/ci_' in p.read_text(encoding='utf-8',errors='replace'):
+                outcomes.append(f'UYARI: {name} eski .studio CI yolunu kullaniyor; .github/scripts/ yoluna elle tasinmali')
         else: shutil.copy2(src,p);outcomes.append(f'Eklendi: {name}')
+    scripts=project/'.github'/'scripts';scripts.mkdir(parents=True,exist_ok=True)
     for name in ('ci_check.py','ci_radar.py'):
-        p=project/'.studio'/name
-        if not p.exists(): shutil.copy2(BASE/'templates/ci'/name,p);outcomes.append(f'Eklendi: {name}')
+        script=scripts/name
+        if not script.exists():
+            shutil.copy2(BASE/'templates/ci'/name,script)
+            outcomes.append(f'Eklendi: .github/scripts/{name}')
     dep=project/'.github'/'dependabot.yml'
     if not dep.exists():
         shutil.copy2(BASE/'templates/ci/dependabot.yml',dep)

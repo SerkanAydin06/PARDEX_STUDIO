@@ -112,7 +112,7 @@ class StudioTests(unittest.TestCase):
     def test_ci_script_godot_project(self):
         p=self.mk()
         core.add_ci(p)
-        r=subprocess.run([sys.executable,str(p/'.studio/ci_check.py')],cwd=p,capture_output=True,text=True)
+        r=subprocess.run([sys.executable,str(p/'.github/scripts/ci_check.py')],cwd=p,capture_output=True,text=True)
         self.assertEqual(r.returncode,0,r.stdout+r.stderr)
     def test_validate_unreal_does_not_lie(self):
         p=self.root/'Unreal';p.mkdir();(p/'game.uproject').write_text('{}')
@@ -146,6 +146,50 @@ class StudioTests(unittest.TestCase):
         p=self.mk();core.set_active(p)
         self.assertEqual(core.active_project(),p.resolve())
 
+    def test_private_workspace_not_published(self):
+        p=self.mk()
+        self.assertIn('.studio/',(p/'.gitignore').read_text().splitlines())
+        subprocess.run(['git','init'],cwd=p,check=True,capture_output=True)
+        subprocess.run(['git','add','.'],cwd=p,check=True,capture_output=True)
+        staged=subprocess.check_output(['git','diff','--cached','--name-only'],cwd=p,text=True)
+        self.assertNotIn('.studio/',staged)
+        self.assertIn('scenes/main.tscn',staged)
+        self.assertTrue(core.verify_git_publish_safe(p))
+
+    def test_legacy_gitignore_preserved(self):
+        p=self.root/'legacy';p.mkdir();(p/'index.html').write_text('ok')
+        (p/'.gitignore').write_text('node_modules/\n')
+        core.attach_project(p)
+        core.attach_project(p)
+        self.assertIn('node_modules/',(p/'.gitignore').read_text())
+        self.assertEqual((p/'.gitignore').read_text().count('\n.studio/'),1)
+
+    def test_forced_private_file_stops_publish(self):
+        p=self.mk();subprocess.run(['git','init'],cwd=p,check=True,capture_output=True)
+        subprocess.run(['git','add','--force','.studio/BRIEF.md'],cwd=p,check=True,capture_output=True)
+        with self.assertRaises(RuntimeError):core.verify_git_publish_safe(p)
+
+    def test_log_redaction(self):
+        sample='OPENAI_API_KEY=SUPERSECRET Bearer tok123 github_pat_abcdefghijklmnopqrstuvwxyz'
+        redacted=core.redact_log_output(sample)
+        for token in ('SUPERSECRET','tok123','github_pat_abcdefghijklmnopqrstuvwxyz'):
+            self.assertNotIn(token,redacted)
+
+    def test_ci_scripts_are_tracked(self):
+        p=self.mk();core.add_ci(p)
+        self.assertTrue((p/'.github/scripts/ci_check.py').exists())
+        self.assertIn('.github/scripts/ci_check.py',(p/'.github/workflows/ci-ultra-pro.yml').read_text())
+        self.assertFalse((p/'.studio/ci_check.py').exists())
+
+    def test_existing_ci_reports_legacy_path(self):
+        p=self.mk()
+        f=p/'.github/workflows/ci-ultra-pro.yml'
+        f.parent.mkdir(parents=True)
+        f.write_text('run: python .studio/ci_check.py')
+        report=core.add_ci(p)
+        self.assertIn('eski .studio CI yolunu kullaniyor',report)
+        self.assertIn('.studio/ci_check.py',f.read_text())
+
 if __name__=='__main__': unittest.main()
 
 class Extras(unittest.TestCase):
@@ -162,7 +206,7 @@ class Extras(unittest.TestCase):
         with zipfile.ZipFile(arc) as z:
             self.assertIn('main.js',z.namelist())
             self.assertNotIn('.env',z.namelist())
-        self.assertIn('backups/',(p/'.studio/.gitignore').read_text())
+        self.assertIn('*',(p/'.studio/.gitignore').read_text())
     def test_guided_limit_enforced_no_calls(self):
         p=core.create_project(self.p,'Test','web','fikir')
         with self.assertRaises(RuntimeError):core.guided_workflow(p,'new feature','En guclu',day_limit=2)
