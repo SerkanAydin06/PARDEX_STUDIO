@@ -91,3 +91,10 @@ Sıkı izolasyon, native abonelik CLI'larını **durduran** güvenlik kapısıd�
 ## Phase 2F — AI Operasyon Müdürü
 
 `app/operations.py` çok projeli ücretsiz operasyon raporu ve **önceden tek tek onaylanmış** görevler için en fazla 2 çağrılık (teknik üst sınır 3), 45 dakikalık sınırlı çalışma vardiyası sunar. Onaylı görev kimlikleri sabitlenir; kuyruk değişirse, hata veya kota sınırı oluşursa durur. Sonuçların sahibi tarafından ayrıca kabul edilmesi gerekir. Native CLI için OS sandbox izolasyonu garanti edilmez. Ayrıntılar: `docs/PHASE2F_OPERATIONS.md`.
+
+
+## 2H — Tek seferlik, önceden onaylı AI vardiya planlama
+
+Bir veya iki ayrı ayrı onaylı işi belirli bir zaman aralığına kaydeden çevrimdışı `app/shift_scheduler.py` ve varsayılan kuru-çalıştırmalı `app/scheduler_cli.py` eklendi. **Kendiliğinden 7/24 çalışmaz, OS seviyesinde izole değildir.** Riskli native yürütme ayrıca iki açık izin gerektirir ve sıkı modda yasaktır. [Ayrıntılar](docs/PHASE2H_SCHEDULED_SHIFTS.md).
+
+Windows'ta **`05_AI_VARDIYA_PLANLAYICI.cmd`** Türkçe plan oluşturma, listeleme ve ücretsiz vade kontrolü ekranını açar. Bu pencere kendi başına bir zamanlayıcı servisi başlatmaz.
