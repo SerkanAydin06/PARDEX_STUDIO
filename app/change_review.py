@@ -21,7 +21,7 @@ MAX_FILES = 12
 MAX_FILE_BYTES = 128_000
 MAX_TOTAL_BYTES = 512_000
 EXTENSIONS = frozenset({'.py', '.gd', '.cs', '.dart', '.js', '.jsx', '.ts', '.tsx',
-    '.kt', '.html', '.css', '.scss', '.json', '.yml', '.yaml', '.md', '.txt', '.shader'})
+    '.kt', '.html', '.css', '.scss', '.json', '.yml', '.yaml', '.md', '.txt', '.shader', '.tscn', '.tres', '.godot', '.gdshader'})
 SKIP_PARTS = frozenset({'.git', '.studio', '.github', '.env', '.vscode', '.idea',
     'node_modules', 'Library', 'Temp', 'Saved', 'build', 'dist', 'secrets', '__pycache__'})
 SKIP_BASENAMES = frozenset({'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'SECURITY.md'})
