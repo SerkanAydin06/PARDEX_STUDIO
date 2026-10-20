@@ -116,6 +116,27 @@ def events(limit=40, path=None):
 
 
 # ---------------- settings & budgets ----------------
+def settings_raw(path=None):
+    out = {}
+    with _conn(path) as db:
+        for row in db.execute('SELECT key,value FROM settings'):
+            try:
+                out[row['key']] = json.loads(row['value'])
+            except ValueError:
+                pass
+    return out
+
+
+def depts(path=None, include_inactive=False):
+    """Live organisation: key -> (name, mission, budget, tier). Falls back to the seed list."""
+    try:
+        import hq_org
+        return {k: (v['name'], v['mission'], v['budget'], v['tier'])
+                for k, v in hq_org.departments(path, include_inactive).items()}
+    except ImportError:
+        return dict(DEPARTMENTS)
+
+
 def settings(path=None):
     out = json.loads(json.dumps(DEFAULT_SETTINGS))
     with _conn(path) as db:
@@ -125,7 +146,10 @@ def settings(path=None):
             except ValueError:
                 pass
     budgets = dict(DEFAULT_SETTINGS['budgets'])
-    budgets.update({k: v for k, v in (out.get('budgets') or {}).items() if k in DEPARTMENTS})
+    known = depts(path, include_inactive=True)
+    budgets.update({k: v for k, v in (out.get('budgets') or {}).items() if k in known})
+    for k in known:
+        budgets.setdefault(k, 0)
     out['budgets'] = budgets
     return out
 
@@ -176,7 +200,7 @@ def update_settings(changes, path=None):
         cur['routing'] = clean
     if 'budgets' in changes:
         b = changes['budgets']
-        if not isinstance(b, dict) or not set(b) <= set(DEPARTMENTS):
+        if not isinstance(b, dict) or not set(b) <= set(depts(path, include_inactive=True)):
             raise ValueError('Bilinmeyen departman')
         for k, v in b.items():
             if type(v) is not int or not 0 <= v <= 200:
@@ -223,7 +247,7 @@ def budget_check(dept, calls, path=None):
     if calls <= 0:
         return True, ''
     if calls_used(dept, path=path) + calls > s['budgets'].get(dept, 0):
-        return False, f'{DEPARTMENTS[dept][0]} haftalık çağrı bütçesi yetmiyor'
+        return False, f'{depts(path, True).get(dept, (dept,))[0]} haftalık çağrı bütçesi yetmiyor'
     if calls_used(path=path) + calls > s['weekly_call_limit']:
         return False, 'Şirket haftalık toplam çağrı sınırı doldu'
     if core.usage_count() + calls > s['day_call_limit']:
@@ -232,7 +256,7 @@ def budget_check(dept, calls, path=None):
 
 
 def record(dept, kind, amount, provider='', job_id='', note='', path=None):
-    if dept not in DEPARTMENTS or kind not in LEDGER_KINDS:
+    if dept not in depts(path, include_inactive=True) or kind not in LEDGER_KINDS:
         raise ValueError('Geçersiz defter kaydı')
     try:
         amount = float(amount)
@@ -284,7 +308,7 @@ def goals(limit=30, path=None):
 
 def add_job(dept, title, kind, tier, est_calls, risk='Düşük', goal_id='', project='', action='',
             status='proposed', note='', idea_id='', path=None):
-    if dept not in DEPARTMENTS or kind not in JOB_KINDS or tier not in TIERS or risk not in RISKS:
+    if dept not in depts(path) or kind not in JOB_KINDS or tier not in TIERS or risk not in RISKS:
         raise ValueError('Geçersiz iş tanımı')
     if status not in ('proposed', 'blocked'):
         raise ValueError('Yeni iş yalnızca önerilir')
@@ -403,7 +427,7 @@ def department_board(path=None):
     s = settings(path)
     js = jobs(path=path)
     out = []
-    for key, (name, mission, _, tier) in DEPARTMENTS.items():
+    for key, (name, mission, _, tier) in depts(path).items():
         mine = [j for j in js if j['dept'] == key]
         active = next((j for j in mine if j['status'] in ('running', 'approved')), None)
         waiting = next((j for j in mine if j['status'] == 'proposed'), None)
@@ -474,7 +498,7 @@ def _norm(text):
 
 def add_lesson(dept, text, source='', path=None):
     """K0 learning: a short, test-backed lesson for one department (deduplicated)."""
-    if dept not in DEPARTMENTS:
+    if dept not in depts(path, include_inactive=True):
         raise ValueError('Bilinmeyen departman')
     text = _clean(text, 240)
     if len(text) < 10:
@@ -524,14 +548,15 @@ def route_stats(path=None):
 
 def department_report(dept, path=None):
     """Zero-token report the owner asks for: work, budget, lessons."""
-    if dept not in DEPARTMENTS:
+    d = depts(path, include_inactive=True)
+    if dept not in d:
         raise ValueError('Bilinmeyen departman')
     mine = [j for j in jobs(path=path) if j['dept'] == dept]
     with _conn(path) as db:
         evs = [dict(r) for r in db.execute('SELECT * FROM events WHERE actor=? OR ref IN (SELECT id FROM jobs WHERE dept=?) '
                                            'ORDER BY id DESC LIMIT 12', (dept, dept))]
     s = settings(path)
-    return {'dept': dept, 'name': DEPARTMENTS[dept][0], 'mission': DEPARTMENTS[dept][1],
+    return {'dept': dept, 'name': d[dept][0], 'mission': d[dept][1],
             'week_calls': calls_used(dept, path=path), 'budget': s['budgets'].get(dept, 0),
             'counts': {st: sum(j['status'] == st for j in mine) for st in JOB_STATES},
             'lessons': lessons(dept, 10, path), 'recent': evs}

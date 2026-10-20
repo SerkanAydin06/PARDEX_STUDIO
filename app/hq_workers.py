@@ -137,7 +137,7 @@ def sync_code_jobs(path=None, queue_path=None):
 def _save_deliverable(job, text):
     DELIVERABLES.mkdir(parents=True, exist_ok=True)
     f = DELIVERABLES / f"{job['id']}.md"
-    f.write_text(f"# {job['title']}\n\nDepartman: {store.DEPARTMENTS[job['dept']][0]}\n\n{text}\n", encoding='utf-8')
+    f.write_text(f"# {job['title']}\n\nDepartman: {store.depts(include_inactive=True).get(job['dept'], (job['dept'],))[0]}\n\n{text}\n", encoding='utf-8')
     return f
 
 
@@ -226,7 +226,7 @@ def run_job(ident, path=None, queue_path=None, caller=None):
 
 def add_department_job(dept, title, path=None):
     """Owner asks a department directly (e.g. 'Ar-Ge, haftalık rapor çıkar')."""
-    if dept not in store.DEPARTMENTS:
+    if dept not in store.depts(path):
         raise ValueError('Bilinmeyen departman')
     s = store.settings(path)
     if dept in ('oyun', 'uygulama', 'otomasyon'):

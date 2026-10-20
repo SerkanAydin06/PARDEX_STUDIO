@@ -156,3 +156,14 @@ input[type=range]{accent-color:var(--teal)}
 .pkg-head{display:flex;justify-content:space-between;gap:8px;align-items:center}
 .report{white-space:pre-wrap;background:#FBFAF7;border:1px solid var(--line);border-radius:12px;padding:14px;font:13px/1.5 var(--font);overflow-wrap:anywhere}
 .wrapall{overflow-wrap:anywhere}
+/* Phase 5 — Yönetim */
+.dept.off,.ver.off{opacity:.55}
+.sugg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}
+.sugg span{flex:1 1 200px}
+.ver{border-bottom:1px solid var(--line);padding-bottom:8px}
+.ver ul,.job ul{margin:4px 0;padding-left:20px}
+.table.compact{min-width:0}.table.compact th,.table.compact td{padding:6px 4px;font-size:13px}
+.dialog-body{padding:16px 20px;display:flex;flex-direction:column;gap:2px;max-height:72vh;overflow:auto}
+.check{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px;margin-top:12px}
+.check input{width:auto;min-height:0}
+#gmy-form textarea{flex:1 1 300px}

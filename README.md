@@ -14,6 +14,7 @@ Yapay zekâların departmanlar hâlinde çalıştığı yerel yazılım şirketi
 ## Belgeler
 
 - [Proje Hattı ve model seçimi](docs/PHASE4_PROJE_HATTI.md)
+- [Yönetim Kurulu: şirketi büyütmek ve yeniden yapılandırmak](docs/PHASE5_YONETIM.md)
 - [Şirket Merkezi paneli](docs/PHASE3_HQ.md)
 - [Ayrıntılı genel bakış](docs/GENEL_BAKIS.md) · [Kurulum](KURULUM_VE_KULLANIM.md) · [Mimari](docs/ARCHITECTURE.md) · [Yol haritası](docs/ROADMAP.md)
 - AI katkı kuralları: [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md) · [GEMINI.md](GEMINI.md) · [CONTRIBUTING.md](CONTRIBUTING.md)

@@ -29,6 +29,7 @@
     <button class="tab" data-view="ideas" type="button">Fikirler &amp; Ar-Ge</button>
     <button class="tab" data-view="depts" type="button">Departmanlar</button>
     <button class="tab" data-view="finance" type="button">Finans</button>
+    <button class="tab" data-view="board" type="button">Yönetim</button>
     <button class="tab" data-view="settings" type="button">Ayarlar</button>
   </nav>
 </header>
@@ -164,6 +165,60 @@
     </div>
   </section>
 
+  <!-- YÖNETİM KURULU -->
+  <section id="view-board" class="view" hidden>
+    <div class="split">
+      <div class="card grow">
+        <div class="card-head"><h2>Genel Müdür Yardımcısı</h2><span class="muted small">Şirketi büyüt, yeniden yapılandır, optimize et. Her öneri senin onayınla uygulanır ve geri alınabilir.</span></div>
+        <div class="chat" id="gmy-log"></div>
+        <form id="gmy-form" class="row"><label class="sr" for="gmy-text">Talimat</label>
+          <textarea id="gmy-text" rows="2" placeholder="Örn: Tasarım departmanı kur, her projede önce o çalışsın · Kod incelemesini iki aşamalı yap · Ar-Ge bütçesini artır"></textarea>
+          <button class="btn btn-dark" type="submit">Gönder (1 çağrı)</button></form>
+        <h3>Onay bekleyen öneriler</h3>
+        <div id="proposals" class="stack"></div>
+      </div>
+      <aside class="card side">
+        <h2>Şirket sağlığı</h2>
+        <div class="muted small">Gerçek kayıtlardan hesaplanır · 0 token</div>
+        <div id="health-summary" class="stack-sm"></div>
+        <h3>Optimizasyon önerileri</h3>
+        <div id="health-suggestions" class="stack-sm"></div>
+        <div class="scroll-x"><table class="table compact"><thead><tr><th>Departman</th><th>Bu hafta</th><th>İlk denemede</th><th>Takılan</th><th>Ders</th></tr></thead><tbody id="health-body"></tbody></table></div>
+      </aside>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Organizasyon</h2><button id="new-dept" class="btn btn-dark" type="button">Yeni departman</button></div>
+      <div id="org-list" class="grid-cards"></div>
+      <h3>İş akışı</h3>
+      <form id="wf-form" class="form-grid">
+        <div><label for="wf-fixes">Paket başına düzeltme hakkı</label><input id="wf-fixes" type="number" min="0" max="3"></div>
+        <div><label for="wf-packages">Proje başına en fazla paket</label><input id="wf-packages" type="number" min="2" max="12"></div>
+        <div><label for="wf-reviews">Bağımsız denetçi sayısı</label><select id="wf-reviews"><option value="1">1 (ekonomik)</option><option value="2">2 (sıkı)</option></select></div>
+        <div><label for="wf-lessons">İsteme eklenen ders sayısı</label><input id="wf-lessons" type="number" min="0" max="8"></div>
+        <div><label for="wf-oyun">Oyunları üreten departman</label><select id="wf-oyun"></select></div>
+        <div><label for="wf-uyg">Uygulamaları üreten departman</label><select id="wf-uyg"></select></div>
+        <div class="row"><button class="btn btn-dark" type="submit">İş akışını kaydet</button></div>
+      </form>
+    </div>
+
+    <div class="split">
+      <div class="card grow">
+        <h2>Değişiklik geçmişi</h2>
+        <div id="versions" class="stack-sm"></div>
+      </div>
+      <div class="card side">
+        <h2>Çekirdek yazılım değişikliği</h2>
+        <p class="muted small">Ayarla yapılamayan değişiklikler (yeni ekran, yeni özellik) şirketin kopyasında yazılır, test edilir, iki farklı AI denetler; ancak sen "Kur" dersen uygulanır ve geri alınabilir.</p>
+        <div id="core-req" class="srcs"></div>
+        <form id="core-form" class="stack-sm"><label for="core-goal">Ne değişsin?</label><textarea id="core-goal" rows="2"></textarea>
+          <button class="btn btn-line" type="submit">Talep oluştur</button></form>
+        <div id="core-list" class="stack-sm"></div>
+        <button id="core-rollback" class="btn btn-link" type="button">Son çekirdek kurulumunu geri al</button>
+      </div>
+    </div>
+  </section>
+
   <!-- AYARLAR -->
   <section id="view-settings" class="view" hidden>
     <form id="settings-form" class="card">
@@ -211,6 +266,25 @@
 <dialog id="out-dialog">
   <div class="dialog-head"><h2 id="out-title">Teslim</h2><button id="out-close" class="btn btn-line" type="button">Kapat</button></div>
   <pre id="out-body"></pre>
+</dialog>
+<dialog id="dept-dialog">
+  <form id="dept-form" class="dialog-form">
+    <div class="dialog-head"><h2 id="dept-title">Departman</h2><button id="dept-close" class="btn btn-line" type="button">Kapat</button></div>
+    <div class="dialog-body">
+      <label for="d-key">Anahtar (küçük harf, değişmez)</label><input id="d-key" type="text" placeholder="tasarim">
+      <label for="d-name">Ad</label><input id="d-name" type="text">
+      <label for="d-mission">Görev</label><input id="d-mission" type="text">
+      <label for="d-prompt">Talimat (departmanın AI'a verilen rolü)</label><textarea id="d-prompt" rows="5"></textarea>
+      <div class="form-grid">
+        <div><label for="d-tier">Kademe</label><select id="d-tier"><option>K0</option><option>K1</option><option>K2</option></select></div>
+        <div><label for="d-budget">Haftalık bütçe</label><input id="d-budget" type="number" min="0" max="200"></div>
+        <div><label for="d-hook">Proje hattındaki yeri</label><select id="d-hook"></select></div>
+        <div><label for="d-mode">Çalışma şekli</label><select id="d-mode"></select></div>
+      </div>
+      <label class="check"><input id="d-active" type="checkbox"> Aktif</label>
+      <div class="row"><button class="btn btn-dark" type="submit">Kaydet (sürüm olarak)</button></div>
+    </div>
+  </form>
 </dialog>
 <script src="/static/app.js"></script>
 </body>

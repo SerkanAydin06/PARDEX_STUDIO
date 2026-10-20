@@ -83,3 +83,11 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 - [x] Departman dersleri (K0), 0 token departman raporu, yalnızca önemli kararlar için patron soruları.
 - [x] Kaynaklı Ar-Ge (en az 2 farklı ve erişilebilir kaynak), üyelik önerileri yalnızca patrona.
 - [ ] Codex ve Gemini CLI ile gerçek uçtan uca deneme; Windows'ta deneme; Unity/Unreal test hattı.
+
+## Aşama 5 — Yönetim Kurulu
+- [x] Veriye dayalı departmanlar; ekleme, güncelleme, kapatma; sürümleme ve geri alma.
+- [x] Proje hattı kancaları (plan sonrası rapor, paket sonrası denetim, teslim öncesi rapor/kod) ve iş akışı ayarları.
+- [x] Genel Müdür Yardımcısı: talimat → doğrulanmış öneri → patron onayı.
+- [x] 0 token şirket sağlığı ve kural tabanlı optimizasyon önerileri.
+- [x] Çekirdek değişiklik talepleri mevcut kopya/test/iki AI/kurulum/geri alma hattına bağlandı.
+- [ ] Çekirdek hattının Docker test imajıyla Windows'ta gerçek denemesi.
