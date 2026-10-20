@@ -3,7 +3,7 @@
 ```
 Sahip (onay / oynanış / görsel test)
      │
-Tkinter UI (`app/gui.py`)
+Tkinter UI (`app/gui.py`)  +  Şirket Merkezi web paneli (`app/hq_server.py` → `hq_ceo`, `hq_workers`, `hq_store`)
      │
 ├── İş akışı / çok motor: `app/core.py`
 ├── AI şirketi ve öneriler: `app/company.py`, `app/company_cli.py`

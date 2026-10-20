@@ -4,6 +4,11 @@
 
 # Ultra Pro AI Studio v5.1 — AI Şirket Merkezi + Kalıcı Görev Kuyruğu (Windows)
 
+## ⭐ Yeni: PARDEX Şirket Merkezi (yerel web paneli)
+
+`09_SIRKET_PANELI.cmd` dosyasına çift tıkla. Tarayıcıda sade bir **Patron Ofisi** açılır. Hedef yazarsın; CEO işleri 11 departmana böler. Her işi sen onaylar, çalıştırır ve kabul edersin. Departmanların haftalık AI çağrı bütçesi, 0 token K0 / ucuz K1 / kod için K2 kademeleri, fikir puanlama, finans defteri ve acil durdur bulunur. Telefon tarayıcısında da çalışır; yalnızca bu bilgisayardan erişilir. Ayrıntılar: [Aşama 3](docs/PHASE3_HQ.md).
+
+
 > **Çalışan, test edilmiş prototip; bitmiş, sınırsız, tamamen otonom bir şirket değil.**
 
 Bu proje birden fazla Godot, Unity, Unreal, Flutter, Android/Kotlin ve Web projesi için ortak çekirdeğe sahip, Türkçe Tkinter masaüstü kontrol merkezidir. Ana amacı **yüksek doğrulama oranı / az ve kısa AI çağrısı**dır. Token tüketimini veya aboneliklerin gerçek kalan kotasını otomatik okuyamaz.
