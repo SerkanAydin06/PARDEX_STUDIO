@@ -75,3 +75,11 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 - [x] Fikir puanlama ve aşama tahtası, finans defteri, olay günlüğü, 0 token sabah brifingi.
 - [x] Yerel güvenli HTTP sunucu (127.0.0.1, oturum anahtarı, Host/Origin kontrolü, CSP) ve mobil uyumlu arayüz.
 - [ ] Gerçek Windows uçtan uca denemesi, video render/ses hattı, zamanlanmış haftalık departman raporları, kaynaklı web araştırması.
+
+## Aşama 4 — Proje Hattı
+- [x] Plan sohbeti → "Bunu yap" → CEO iş paylaşımı → üretim → K0 test + farklı sağlayıcıyla bağımsız inceleme → en fazla 2 düzeltme → teslim/kabul/değişiklik.
+- [x] Ürünler şirket deposu dışında, kendi git deposunda; paket başına yerel commit.
+- [x] Abonelik tabanlı model yönlendirme (takma adlar, effort), başarı istatistiğiyle öğrenme, patron sabitlemesi.
+- [x] Departman dersleri (K0), 0 token departman raporu, yalnızca önemli kararlar için patron soruları.
+- [x] Kaynaklı Ar-Ge (en az 2 farklı ve erişilebilir kaynak), üyelik önerileri yalnızca patrona.
+- [ ] Codex ve Gemini CLI ile gerçek uçtan uca deneme; Windows'ta deneme; Unity/Unreal test hattı.

@@ -7,7 +7,9 @@
   const STATUS = { proposed: 'Onay bekliyor', approved: 'Onaylandı', running: 'Çalışıyor', delivered: 'Teslim edildi', accepted: 'Kabul edildi', rejected: 'Reddedildi', failed: 'Takıldı', blocked: 'Engellendi' };
   const STAGES = [['fikir', 'Fikir'], ['degerlendirme', 'Değerlendir'], ['onay', 'Patron onayı'], ['uretim', 'Üretim'], ['kalite', 'Kalite'], ['yayin', 'Yayın'], ['gelir', 'Gelir'], ['arsiv', 'Arşiv']];
   const DSTATE = { calisiyor: 'Çalışıyor', onay: 'Onay bekliyor', bosta: 'Boşta', durdu: 'Durduruldu' };
-  let META = null, DASH = null, JOBS = [], FILTER = 'all', VIEW = 'office', poll = null;
+  let META = null, DASH = null, JOBS = [], FILTER = 'all', VIEW = 'office', poll = null, PID = '';
+  const PSTAGE = { planlama: 'Planlama', uretim: 'Üretimde', soru: 'Karar bekliyor', teslim: 'Teslim edildi', tamamlandi: 'Tamamlandı', durdu: 'Durdu', iptal: 'İptal' };
+  const KSTATE = { bekliyor: 'Sırada', calisiyor: 'Çalışıyor', duzeltme: 'Düzeltmede', tamam: 'Kontrolden geçti', takildi: 'Takıldı', atlandi: 'Atlandı' };
 
   async function api(path, body) {
     const opt = { headers: { 'X-PARDEX-Token': TOKEN } };
@@ -79,6 +81,7 @@
       <div class="kpi"><div class="kpi-label">Haftalık AI bütçesi</div><div class="kpi-value">%${pct}</div>
         <div class="bar${pct > 80 ? ' warn' : ''}"><span data-w="${pct}"></span></div><div class="kpi-label">${k.calls_used}/${k.calls_limit} çağrı · bugün ${k.calls_today}/${k.day_limit}</div></div>
       <div class="kpi"><div class="kpi-label">Bu ay net (${esc(d.finance.month)})</div><div class="kpi-value">${esc(money(d.finance.net))}</div><div class="kpi-label">gelir ${esc(money(d.finance.income))} · gider ${esc(money(d.finance.expense))}</div></div>`;
+    $('#office-questions').innerHTML = questionCards(d.questions || []);
     $('#approvals').innerHTML = d.approvals.length ? d.approvals.map(jobCard).join('') : '<div class="empty">Bekleyen karar yok. Aşağıdan şirkete bir hedef ver.</div>';
     $('#briefing').innerHTML = d.briefing.map((b) => `<div><b>${esc(b.label)}:</b> ${esc(b.text)}</div>`).join('');
     $('#dept-mini').innerHTML = d.departments.map((x) => `<div class="dept"><div class="dept-head"><span class="dept-name">${esc(x.name)}</span><span class="chip ${x.state}">${DSTATE[x.state]}</span></div>
@@ -88,10 +91,12 @@
       <span class="s">Adım ${i + 1}</span><b>${label}</b><span class="n">${p[key] || 0}</span></div>`).join('');
     bars($('#view-office'));
     const pill = $('#status-pill');
-    pill.textContent = d.paused ? 'Şirket durduruldu' : (d.run.running ? 'Bir iş çalışıyor' : 'Şirket çalışıyor');
+    pill.textContent = d.paused ? 'Şirket durduruldu' : (d.production.running ? 'Üretim sürüyor' : (d.run.running ? 'Bir iş çalışıyor' : 'Şirket çalışıyor'));
     pill.className = 'pill' + (d.paused ? ' paused' : '');
     $('#pause-btn').textContent = d.paused ? 'Çalışmayı başlat' : 'Acil durdur';
     if (d.run.error) toast(d.run.error, true);
+    if (d.production.error) toast(d.production.error, true);
+    if (d.production.running) startPoll();
   }
 
   /* ---------- jobs ---------- */
@@ -114,6 +119,8 @@
       const items = list.filter((i) => i.stage === key);
       return `<div class="col"><h3>${label} (${items.length})</h3>${items.map((i) => `<div class="idea">
         <div>${esc(i.title)}</div><div><b>${i.score}</b>/100 · gelir ${i.revenue} · emek ${i.effort}</div>
+        ${i.note ? `<div class="small muted">${esc(i.note.slice(0, 260))}</div>` : ''}
+        ${srcLinks(i.sources)}
         <label class="small" for="st-${i.id}">Aşama</label>
         <select id="st-${i.id}" data-idea="${i.id}">${opts.replace(`value="${key}"`, `value="${key}" selected`)}</select>
         ${['fikir', 'degerlendirme', 'onay'].includes(key) ? `<button class="btn btn-teal" data-build="${i.id}" type="button">Üretime al</button>` : ''}
@@ -129,6 +136,7 @@
         <div class="dept-cur">${esc(x.mission)}</div>
         <div class="dept-meta">Kademe ${esc(x.tier)} · bu hafta ${x.used}/${x.budget} çağrı · ${x.done} kabul edilmiş iş</div>
         <div class="bar${pct > 80 ? ' warn' : ''}"><span data-w="${pct}"></span></div>
+        <button class="btn btn-line" type="button" data-report="${x.key}">Rapor iste (0 token)</button>
         <form data-dept="${x.key}"><label class="small" for="dj-${x.key}">Bu departmana iş ver</label>
           <input id="dj-${x.key}" type="text" placeholder="Kısaca ne yapılsın?"><button class="btn btn-dark" type="submit">Öner</button></form></div>`;
     }).join('');
@@ -152,9 +160,112 @@
     const s = m.settings;
     $('#set-project').innerHTML = '<option value="">— Seçilmedi —</option>' + m.projects.map((p) => `<option value="${esc(p.path)}"${p.path === s.default_project ? ' selected' : ''}>${esc(p.name)} (${esc(p.engine)})</option>`).join('');
     $('#set-ollama').value = s.ollama_model || ''; $('#set-limit').value = s.weekly_call_limit; $('#set-currency').value = s.currency;
+    $('#set-day').value = s.day_call_limit; $('#set-root').value = s.projects_root || '';
     $('#budget-grid').innerHTML = Object.entries(m.departments).map(([k, v]) => `<div><label for="b-${k}">${esc(v.name)}</label><input id="b-${k}" data-budget="${k}" type="number" min="0" max="200" value="${s.budgets[k]}"></div>`).join('');
     $('#l-dept').innerHTML = Object.entries(m.departments).map(([k, v]) => `<option value="${k}"${k === 'finans' ? ' selected' : ''}>${esc(v.name)}</option>`).join('');
     $('#events').innerHTML = evs.length ? evs.map((e) => `<div>${esc(e.at.slice(0, 16).replace('T', ' '))} · <b>${esc(e.actor)}</b> · ${esc(e.action)} ${esc(e.ref)} ${esc(e.note)}</div>`).join('') : '<div>Kayıt yok.</div>';
+  }
+
+
+  /* ---------- questions (only important decisions reach the owner) ---------- */
+  function questionCards(qs) {
+    return qs.map((q) => `<div class="job ask"><div class="job-main">
+      <div class="dept-tag">Karar gerekiyor · ${esc(q.product || '')}</div>
+      <div class="job-title">${esc(q.text)}</div>
+      <div class="job-actions">${(q.options || []).map((o) => `<button class="btn btn-teal" data-q="${q.id}" data-a="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+      <form class="q-free" data-qf="${q.id}"><label class="small" for="qa-${q.id}">${(q.options || []).length ? 'Ya da kendi cevabın' : 'Cevabın'}</label>
+        <input id="qa-${q.id}" type="text" placeholder="Kısaca yaz"><button class="btn btn-dark" type="submit">Gönder</button></form>
+    </div></div>`).join('');
+  }
+  async function onQuestion(ev) {
+    const b = ev.target.closest('button[data-q]'); if (!b) return;
+    await act(() => api(`/api/question/${b.dataset.q}/answer`, { answer: b.dataset.a }), 'Cevaplandı — ekip devam ediyor'); startPoll();
+  }
+  async function onQuestionFree(ev) {
+    const f = ev.target.closest('form[data-qf]'); if (!f) return; ev.preventDefault();
+    const v = f.querySelector('input').value.trim(); if (v.length < 2) return toast('Cevap boş', true);
+    await act(() => api(`/api/question/${f.dataset.qf}/answer`, { answer: v }), 'Cevaplandı — ekip devam ediyor'); startPoll();
+  }
+  const srcLinks = (raw) => {
+    let list = []; try { list = JSON.parse(raw || '[]'); } catch (e) { list = []; }
+    return list.length ? `<div class="srcs">${list.map((u, n) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">Kaynak ${n + 1}</a>`).join(' ')}</div>` : '';
+  };
+
+  /* ---------- projects ---------- */
+  function renderProducts(list) {
+    $('#product-list').innerHTML = list.length ? list.map((p) => `<button type="button" class="prod${p.id === PID ? ' sel' : ''}" data-pid="${p.id}">
+      <span class="prod-name">${esc(p.name)}</span><span class="chip ${p.open_questions ? 'onay' : (p.stage === 'uretim' ? 'calisiyor' : '')}">${p.open_questions ? 'Karar bekliyor' : PSTAGE[p.stage]}</span>
+      <span class="small muted">${p.kind === 'oyun' ? 'Oyun' : 'Uygulama'} · ${esc(p.engine || 'motor seçilmedi')} · ${p.used_calls}/${p.approved_calls} çağrı</span></button>`).join('') : '<div class="empty">Henüz proje yok.</div>';
+  }
+  function stepper(p) {
+    const done = (p.packages || []).filter((k) => k.status === 'tamam').length, all = (p.packages || []).length;
+    const idx = { planlama: 0, uretim: 1, soru: 1, durdu: 1, teslim: 3, tamamlandi: 4, iptal: 0 }[p.stage];
+    const steps = ['Planlama', 'Üretim', 'Kontrol & düzeltme', 'Teslim', 'Tamam'];
+    return `<ol class="steps">${steps.map((s, i) => `<li class="${i < idx ? 'done' : (i === idx ? 'now' : '')}">${s}</li>`).join('')}</ol>
+      ${all ? `<div class="small muted">${done}/${all} paket kontrolden geçti</div><div class="bar"><span data-w="${Math.round(done / all * 100)}"></span></div>` : ''}`;
+  }
+  function specCard(sp) {
+    const li = (a) => (a || []).map((x) => `<li>${esc(x)}</li>`).join('');
+    return `<div class="spec"><h3>Ürün tarifi</h3>
+      <div><b>${esc(sp.name || '')}</b> · ${esc(sp.engine || 'motor ?')} · ${esc(sp.platform || '')}</div>
+      <div class="small">${esc(sp.summary || 'Henüz özet yok')}</div>
+      ${sp.features && sp.features.length ? `<div class="small muted">Özellikler</div><ul>${li(sp.features)}</ul>` : ''}
+      ${sp.acceptance && sp.acceptance.length ? `<div class="small muted">Kabul ölçütleri</div><ul>${li(sp.acceptance)}</ul>` : ''}
+      ${sp.out_of_scope && sp.out_of_scope.length ? `<div class="small muted">Kapsam dışı</div><ul>${li(sp.out_of_scope)}</ul>` : ''}
+      ${sp.assumptions && sp.assumptions.length ? `<div class="small muted">Varsayımlar</div><ul>${li(sp.assumptions)}</ul>` : ''}</div>`;
+  }
+  function renderProduct(p) {
+    const running = DASH && DASH.production.running === p.id;
+    let body = '';
+    if (p.stage === 'planlama') {
+      const needFolder = p.spec.engine && !['godot', 'web', 'flutter'].includes(p.spec.engine);
+      body = `<div class="chat" id="chat-log">${p.chat.map((m) => `<div class="msg ${m.role}"><span class="who">${m.role === 'patron' ? 'Sen' : 'Ürün Müdürü'}</span>${esc(m.text)}</div>`).join('')}</div>
+        <form id="chat-form" class="row"><label class="sr" for="chat-text">Mesaj</label><textarea id="chat-text" rows="2" placeholder="Ana hatları anlat…"></textarea>
+          <button class="btn btn-dark" type="submit">Gönder</button></form>
+        ${specCard(p.spec)}
+        ${needFolder ? `<label for="exist-folder">Bu motorda proje resmi editörde açılır. Oluşturduğun klasörün yolu:</label><input id="exist-folder" type="text">` : ''}
+        <div class="row"><button class="btn btn-teal" id="do-it" type="button">Bunu yap</button><button class="btn btn-link" id="p-cancel" type="button">Projeyi iptal et</button></div>`;
+    } else {
+      const qs = p.questions.filter((q) => q.status === 'acik').map((q) => Object.assign({ product: p.name }, q));
+      body = `${questionCards(qs)}
+        <div class="small muted wrapall">Klasör (ayrı depo): ${esc(p.folder)}</div>
+        <div class="stack">${p.packages.map((k) => `<div class="pkg ${k.status}"><div class="pkg-head"><b>${k.seq}. ${esc(k.title)}</b><span class="chip ${k.status === 'calisiyor' || k.status === 'duzeltme' ? 'calisiyor' : (k.status === 'takildi' ? 'onay' : '')}">${KSTATE[k.status]}</span></div>
+          <div class="small muted">${esc(META ? (META.departments[k.dept] || {}).name : k.dept)}${k.provider ? ' · ' + esc(k.provider) + ' ' + esc(k.model) : ''}${k.attempts ? ' · ' + k.attempts + ' düzeltme turu' : ''}</div>
+          ${k.findings ? `<div class="small">Kontrol: ${esc(k.findings)}</div>` : ''}${k.summary ? `<div class="small">Yapılan: ${esc(k.summary)}</div>` : ''}</div>`).join('')}</div>
+        ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<pre class="report">${esc(p.report)}</pre>` : ''}
+        <div class="row">
+          ${(p.stage === 'uretim' || p.stage === 'durdu') && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
+          ${running ? '<span class="muted">Ekip çalışıyor… (bu sayfa kendini yeniler)</span>' : ''}
+          ${p.stage === 'teslim' ? '<button class="btn btn-teal" id="p-accept" type="button">Teslimi kabul et</button>' : ''}
+        </div>
+        ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<form id="change-form"><label for="change-text">Değişiklik iste (ekip düzeltip yeniden teslim eder)</label><textarea id="change-text" rows="2"></textarea><div class="row"><button class="btn btn-line" type="submit">Değişikliği gönder</button></div></form>` : ''}`;
+    }
+    $('#product-detail').innerHTML = `<div class="card-head"><h2>${esc(p.name)}</h2><span class="chip">${PSTAGE[p.stage]}</span></div>${stepper(p)}${body}`;
+    bars($('#product-detail'));
+    const log = $('#chat-log'); if (log) log.scrollTop = log.scrollHeight;
+  }
+  async function onProductClick(ev) {
+    const t = ev.target.closest('button'); if (!t) return;
+    if (t.id === 'do-it') {
+      const f = $('#exist-folder');
+      if (!confirm('Tarif dondurulacak, proje ayrı klasörde açılacak ve üretim başlayacak. CEO iş paylaşımı için 1 çağrı, sonra her paket için yaklaşık 2 çağrı kullanılır. Başlasın mı?')) return;
+      t.disabled = true; t.textContent = 'CEO işleri paylaştırıyor…';
+      await act(() => api(`/api/product/${PID}/start`, { folder: f ? f.value.trim() : '' }), 'Üretim başladı'); startPoll(); return;
+    }
+    if (t.id === 'p-run') { await act(() => api(`/api/product/${PID}/run`, {}), 'Üretim sürüyor'); startPoll(); return; }
+    if (t.id === 'p-accept') return act(() => api(`/api/product/${PID}/accept`, {}), 'Proje tamamlandı');
+    if (t.id === 'p-cancel') { if (confirm('Proje iptal edilsin mi?')) act(() => api(`/api/product/${PID}/cancel`, {}), 'İptal edildi'); return; }
+    return onQuestion(ev);
+  }
+
+  /* ---------- routing ---------- */
+  function renderRouting(r) {
+    $('#routing-installed').textContent = 'Kurulu araçlar: ' + (r.installed.length ? r.installed.join(', ') : 'yok — Claude Code / Codex / Gemini CLI kur ve giriş yap') + '. Sürüm numarası yazılmaz; takma adlar (sonnet, opus, haiku, flash, pro) aboneliğindeki en güncel modele gider.';
+    const ov = (META && META.settings.routing) || {};
+    $('#routing-body').innerHTML = r.rows.map((x) => { const o = ov[x.role] || {}; return `<tr data-route="${x.role}"><td>${esc(x.label)}</td><td>${esc(x.provider)} ${esc(x.model)} ${esc(x.effort)}<div class="small muted">${esc(x.reason)}</div></td>
+      <td><select class="r-prov" aria-label="Sağlayıcı"><option value="">Otomatik</option>${['Claude', 'Codex', 'Gemini'].map((p) => `<option${o.provider === p ? ' selected' : ''}>${p}</option>`).join('')}</select></td>
+      <td><input class="r-model" aria-label="Model" value="${esc(o.model || '')}" placeholder="sonnet / pro…"></td>
+      <td><select class="r-eff" aria-label="Effort">${['', 'low', 'medium', 'high'].map((e) => `<option value="${e}"${(o.effort || '') === e ? ' selected' : ''}>${e || '-'}</option>`).join('')}</select></td></tr>`; }).join('');
   }
 
   /* ---------- refresh / nav ---------- */
@@ -163,11 +274,12 @@
     if (!META) META = await api('/api/settings');
     renderOffice(DASH);
     if (VIEW === 'jobs') { JOBS = await api('/api/jobs'); renderJobs(); }
+    if (VIEW === 'projects') { renderProducts(await api('/api/products')); if (PID) renderProduct(await api('/api/product/' + PID)); }
     if (VIEW === 'ideas') renderIdeas(await api('/api/ideas'));
     if (VIEW === 'depts') renderDepts(DASH);
     if (VIEW === 'finance') renderFinance(DASH, await api('/api/ledger'));
-    if (VIEW === 'settings') { META = await api('/api/settings'); renderSettings(META, await api('/api/events')); }
-    if (!DASH.run.running && poll) { clearInterval(poll); poll = null; }
+    if (VIEW === 'settings') { META = await api('/api/settings'); renderSettings(META, await api('/api/events')); renderRouting(await api('/api/routing')); }
+    if (!DASH.run.running && !DASH.production.running && poll) { clearInterval(poll); poll = null; }
   }
   function startPoll() { if (!poll) poll = setInterval(() => refresh().catch(() => {}), 3000); }
   function show(view) {
@@ -180,6 +292,50 @@
   /* ---------- events ---------- */
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
   $('#approvals').addEventListener('click', onJobClick);
+  $('#office-questions').addEventListener('click', onQuestion);
+  $('#office-questions').addEventListener('submit', onQuestionFree);
+  $('#product-detail').addEventListener('click', onProductClick);
+  $('#product-detail').addEventListener('submit', async (e) => {
+    if (e.target.closest('form[data-qf]')) return onQuestionFree(e);
+    e.preventDefault();
+    if (e.target.id === 'chat-form') {
+      const ta = $('#chat-text'); const text = ta.value.trim(); if (!text) return;
+      ta.value = ''; const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Ürün Müdürü yazıyor…';
+      try { renderProduct(await api(`/api/product/${PID}/chat`, { text })); } catch (err) { toast(err.message, true); btn.disabled = false; btn.textContent = 'Gönder'; }
+    }
+    if (e.target.id === 'change-form') {
+      await act(() => api(`/api/product/${PID}/changes`, { note: $('#change-text').value }), 'Ekip düzeltmeye başladı'); startPoll();
+    }
+  });
+  $('#product-list').addEventListener('click', (e) => { const b = e.target.closest('[data-pid]'); if (b) { PID = b.dataset.pid; refresh(); } });
+  $('#new-product').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const p = await act(() => api('/api/product', { name: $('#np-name').value, kind: $('#np-kind').value }), 'Proje açıldı — Ürün Müdürü bekliyor');
+    if (p) { PID = p.id; $('#np-name').value = ''; refresh(); }
+  });
+  $('#research-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!confirm('Ar-Ge 1 AI çağrısıyla internette araştırma yapacak. Devam?')) return;
+    $('#rs-status').textContent = 'Ar-Ge araştırıyor ve kaynakları doğruluyor…';
+    try {
+      const r = await api('/api/research', { focus: $('#rs-focus').value, topic: $('#rs-topic').value });
+      $('#rs-result').innerHTML = `<div><b>${r.accepted.length}</b> kaynaklı fikir eklendi (${esc(r.provider)}).</div>` +
+        r.rejected.map((x) => `<div class="small muted">Elendi: ${esc(x.title)} — ${esc(x.reason)}</div>`).join('');
+      $('#rs-status').textContent = ''; refresh();
+    } catch (err) { $('#rs-status').textContent = ''; toast(err.message, true); }
+  });
+  $('#dept-full').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-report]'); if (!b) return;
+    try {
+      const r = await api('/api/report/' + b.dataset.report);
+      const c = Object.entries(r.counts).filter(([, v]) => v).map(([k, v]) => `${STATUS[k] || k}: ${v}`).join(' · ') || 'Henüz iş yok';
+      $('#out-title').textContent = r.name + ' — rapor';
+      $('#out-body').textContent = `Görev: ${r.mission}\nBu hafta: ${r.week_calls}/${r.budget} AI çağrısı\nİşler: ${c}\n\nÖğrenilen dersler:\n` +
+        (r.lessons.length ? r.lessons.map((l) => `• ${l.text} (${l.hits} kez)`).join('\n') : '• Henüz ders yok') +
+        '\n\nSon hareketler:\n' + (r.recent.length ? r.recent.map((x) => `• ${x.at.slice(0, 16).replace('T', ' ')} ${x.action} ${x.note || ''}`).join('\n') : '• Kayıt yok');
+      $('#out-dialog').showModal();
+    } catch (err) { toast(err.message, true); }
+  });
   $('#job-list').addEventListener('click', onJobClick);
   $('#job-filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { FILTER = b.dataset.f; renderJobs(); } });
   $('#out-close').addEventListener('click', () => $('#out-dialog').close());
@@ -219,7 +375,10 @@
   $('#settings-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const budgets = {}; document.querySelectorAll('[data-budget]').forEach((i) => { budgets[i.dataset.budget] = Number(i.value); });
-    act(() => api('/api/settings', { default_project: $('#set-project').value, ollama_model: $('#set-ollama').value.trim(), weekly_call_limit: Number($('#set-limit').value), currency: $('#set-currency').value, budgets }), 'Ayarlar kaydedildi')
+    const routing = {}; document.querySelectorAll('[data-route]').forEach((row) => {
+      const prov = row.querySelector('.r-prov').value; if (prov) routing[row.dataset.route] = { provider: prov, model: row.querySelector('.r-model').value.trim(), effort: row.querySelector('.r-eff').value };
+    });
+    act(() => api('/api/settings', { default_project: $('#set-project').value, ollama_model: $('#set-ollama').value.trim(), weekly_call_limit: Number($('#set-limit').value), day_call_limit: Number($('#set-day').value), projects_root: $('#set-root').value.trim(), currency: $('#set-currency').value, budgets, routing }), 'Ayarlar kaydedildi')
       .then(() => { META = null; });
   });
 

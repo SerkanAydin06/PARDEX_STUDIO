@@ -131,3 +131,28 @@ dialog pre{margin:0;padding:20px;white-space:pre-wrap;overflow-wrap:anywhere;fon
   .job-actions{width:100%}.job-actions .btn{flex:1 1 0}
 }
 input[type=range]{accent-color:var(--teal)}
+/* Phase 4 — projects, questions, Ar-Ge */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.job.ask{background:var(--amber-l);border-color:#E6CFA9}
+.q-free{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;width:100%}
+.q-free label{flex-basis:100%}.q-free input{flex:1 1 220px}
+.srcs{display:flex;flex-wrap:wrap;gap:8px;font-size:13px}
+.prod{display:flex;flex-direction:column;gap:4px;align-items:flex-start;text-align:left;width:100%;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:44px}
+.prod.sel{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-l)}
+.prod-name{font-weight:600}
+.steps{list-style:none;display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:0}
+.steps li{font-size:13px;padding:6px 10px;border-radius:999px;background:var(--soft);color:var(--ink2)}
+.steps li.done{background:var(--teal-l);color:var(--teal-d)}
+.steps li.now{background:var(--ink);color:#fff}
+.chat{display:flex;flex-direction:column;gap:10px;max-height:440px;overflow:auto;padding:4px}
+.msg{max-width:86%;padding:10px 14px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;background:var(--soft)}
+.msg.patron{align-self:flex-end;background:var(--ink);color:#fff}
+.msg .who{display:block;font-size:12px;font-weight:600;opacity:.75;margin-bottom:2px}
+#chat-form textarea{flex:1 1 300px}
+.spec{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;background:#FBFAF7}
+.spec h3{margin:0}.spec ul{margin:0;padding-left:20px;font-size:14px}
+.pkg{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;background:#fff}
+.pkg.tamam{background:#EEF6F5}.pkg.takildi{background:var(--red-l)}.pkg.atlandi{opacity:.7}
+.pkg-head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.report{white-space:pre-wrap;background:#FBFAF7;border:1px solid var(--line);border-radius:12px;padding:14px;font:13px/1.5 var(--font);overflow-wrap:anywhere}
+.wrapall{overflow-wrap:anywhere}

@@ -6,6 +6,7 @@ Every job starts as ``proposed`` and needs the owner's explicit approval.
 import contextlib
 import datetime as dt
 import json
+import re
 import sqlite3
 import uuid
 from pathlib import Path
@@ -23,14 +24,14 @@ TIERS = {
 
 # key: (name, mission, default weekly AI-call budget, default tier)
 DEPARTMENTS = {
-    'ceo':       ('CEO · Genel Müdür', 'Hedefi departmanlara böler, sıraya koyar, sabah brifingi hazırlar', 7, 'K0'),
-    'arge':      ('Ar-Ge & İnternet Radarı', 'Resmî sürüm radarı, trend ve fırsat raporları', 4, 'K1'),
-    'urun':      ('Ürün Müdürü', 'Fikirleri kâr, süre ve maliyete göre puanlar; MVP tarifi yazar', 3, 'K0'),
-    'oyun':      ('Oyun Stüdyosu', 'Godot ve diğer motorlarda oyun kodu', 15, 'K2'),
-    'uygulama':  ('Uygulama & Sistemler', 'Web/mobil araçlar ve şirketin kendi yazılımı', 10, 'K2'),
+    'ceo':       ('CEO · Genel Müdür', 'Onaylı planı iş paketlerine böler, sırayı ve modelleri belirler', 10, 'K1'),
+    'arge':      ('Ar-Ge & İnternet Radarı', 'Kaynaklı fikir, fırsat ve şirket gelişimi araştırması', 8, 'K1'),
+    'urun':      ('Ürün Müdürü', 'Patronla plan sohbeti yapar, ürün tarifini (spec) yazar', 15, 'K1'),
+    'oyun':      ('Oyun Stüdyosu', 'Godot ve diğer motorlarda oyun kodu', 40, 'K2'),
+    'uygulama':  ('Uygulama & Sistemler', 'Web/mobil araçlar ve şirketin kendi yazılımı', 40, 'K2'),
     'otomasyon': ('Otomasyon & Makro', 'Kendi projeler için test botu ve iş akışı makroları', 4, 'K2'),
     'medya':     ('Medya & Video', 'Video senaryosu, sahne listesi, altyazı ve tanıtım metni', 6, 'K1'),
-    'kalite':    ('Kalite & Güvenlik', 'Otomatik test ve farklı AI ile ikinci göz', 6, 'K0'),
+    'kalite':    ('Kalite & Güvenlik', 'Otomatik test ve farklı AI ile bağımsız kod incelemesi', 40, 'K1'),
     'finans':    ('Finans & Token', 'Bütçe, gider, gelir ve başabaş takibi', 0, 'K0'),
     'buyume':    ('Büyüme & Yayın', 'Mağaza sayfası ve sosyal medya taslakları; yayın yalnızca sahiple', 4, 'K1'),
     'gelisim':   ('Gelişim Konseyi', 'Hatalardan ders çıkarır, sistem iyileştirmesi önerir', 1, 'K1'),
@@ -44,7 +45,10 @@ LEDGER_KINDS = ('ai_call', 'income', 'expense')
 
 DEFAULT_SETTINGS = {
     'paused': False,
-    'weekly_call_limit': 60,
+    'weekly_call_limit': 200,
+    'day_call_limit': 40,
+    'projects_root': str(Path.home() / 'PardexProjeler'),
+    'routing': {},
     'budgets': {k: v[2] for k, v in DEPARTMENTS.items()},
     'ollama_model': '',
     'default_project': '',
@@ -72,11 +76,18 @@ def _conn(path=None):
         score INTEGER NOT NULL, stage TEXT NOT NULL, note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS ledger(id TEXT PRIMARY KEY, at TEXT NOT NULL, week TEXT NOT NULL,
         dept TEXT NOT NULL, kind TEXT NOT NULL, amount REAL NOT NULL, provider TEXT, job_id TEXT, note TEXT);
+    CREATE TABLE IF NOT EXISTS lessons(id TEXT PRIMARY KEY, dept TEXT NOT NULL, text TEXT NOT NULL,
+        source TEXT, hits INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS route_stats(role TEXT NOT NULL, provider TEXT NOT NULL, n INTEGER NOT NULL,
+        ok INTEGER NOT NULL, PRIMARY KEY(role, provider));
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL,
         actor TEXT NOT NULL, action TEXT NOT NULL, ref TEXT, note TEXT);
     CREATE INDEX IF NOT EXISTS jobs_status ON jobs(status);
     CREATE INDEX IF NOT EXISTS ledger_week ON ledger(week, dept, kind);
     ''')
+    cols = {r[1] for r in db.execute('PRAGMA table_info(ideas)')}
+    if 'sources' not in cols:
+        db.execute('ALTER TABLE ideas ADD COLUMN sources TEXT')
     try:
         with db:
             yield db
@@ -120,7 +131,8 @@ def settings(path=None):
 
 
 def update_settings(changes, path=None):
-    allowed = {'paused', 'weekly_call_limit', 'budgets', 'ollama_model', 'default_project', 'currency'}
+    allowed = {'paused', 'weekly_call_limit', 'day_call_limit', 'budgets', 'ollama_model', 'default_project',
+               'currency', 'projects_root', 'routing'}
     if not isinstance(changes, dict) or not set(changes) <= allowed:
         raise ValueError('Bilinmeyen ayar')
     cur = settings(path)
@@ -131,6 +143,37 @@ def update_settings(changes, path=None):
         if type(v) is not int or not 0 <= v <= 500:
             raise ValueError('Haftalık sınır 0-500 olmalı')
         cur['weekly_call_limit'] = v
+    if 'day_call_limit' in changes:
+        v = changes['day_call_limit']
+        if type(v) is not int or not 0 <= v <= 200:
+            raise ValueError('Günlük sınır 0-200 olmalı')
+        cur['day_call_limit'] = v
+    if 'projects_root' in changes:
+        root = Path(str(changes['projects_root'] or '')).expanduser().resolve()
+        if not str(changes['projects_root'] or '').strip():
+            raise ValueError('Proje klasörü gerekli')
+        if root == core.BASE or core.BASE in root.parents:
+            raise ValueError('Ürünler şirket deposunun içinde olamaz; ayrı bir klasör seç')
+        cur['projects_root'] = str(root)
+    if 'routing' in changes:
+        r = changes['routing']
+        if not isinstance(r, dict):
+            raise ValueError('Yönlendirme tablosu geçersiz')
+        clean = {}
+        for role, v in r.items():
+            if not re.fullmatch(r'[a-z_]{2,20}', str(role)) or not isinstance(v, dict):
+                raise ValueError('Yönlendirme rolü geçersiz')
+            prov = v.get('provider', '')
+            if prov not in ('', 'Claude', 'Codex', 'Gemini'):
+                raise ValueError('Sağlayıcı Claude/Codex/Gemini olmalı')
+            model, effort = str(v.get('model', '')), str(v.get('effort', ''))
+            if model and not re.fullmatch(r'[a-zA-Z0-9_.:-]{2,60}', model):
+                raise ValueError('Model adı geçersiz')
+            if effort not in ('', 'low', 'medium', 'high'):
+                raise ValueError('Effort low/medium/high olmalı')
+            if prov:
+                clean[role] = {'provider': prov, 'model': model, 'effort': effort}
+        cur['routing'] = clean
     if 'budgets' in changes:
         b = changes['budgets']
         if not isinstance(b, dict) or not set(b) <= set(DEPARTMENTS):
@@ -141,7 +184,6 @@ def update_settings(changes, path=None):
             cur['budgets'][k] = v
     if 'ollama_model' in changes:
         m = str(changes['ollama_model'] or '').strip()
-        import re
         if m and not re.fullmatch(r'[a-zA-Z0-9_.:/-]{2,100}', m):
             raise ValueError('Geçersiz yerel model adı')
         cur['ollama_model'] = m
@@ -184,8 +226,8 @@ def budget_check(dept, calls, path=None):
         return False, f'{DEPARTMENTS[dept][0]} haftalık çağrı bütçesi yetmiyor'
     if calls_used(path=path) + calls > s['weekly_call_limit']:
         return False, 'Şirket haftalık toplam çağrı sınırı doldu'
-    if core.usage_count() + calls > core.DAY_LIMIT_DEFAULT:
-        return False, f'Yerel günlük AI sınırı ({core.DAY_LIMIT_DEFAULT}) doldu'
+    if core.usage_count() + calls > s['day_call_limit']:
+        return False, f'Günlük AI çağrı sınırı ({s["day_call_limit"]}) doldu'
     return True, ''
 
 
@@ -311,7 +353,7 @@ def idea_score(revenue, effort, cost, fit):
     return round(((revenue * 2 + fit) - (effort + cost) + 7) / 20 * 100)
 
 
-def add_idea(title, revenue=3, effort=3, cost=3, fit=3, source='patron', note='', path=None):
+def add_idea(title, revenue=3, effort=3, cost=3, fit=3, source='patron', note='', path=None, sources=()):
     vals = (revenue, effort, cost, fit)
     if not all(type(v) is int and 1 <= v <= 5 for v in vals):
         raise ValueError('Puanlar 1-5 olmalı')
@@ -321,8 +363,11 @@ def add_idea(title, revenue=3, effort=3, cost=3, fit=3, source='patron', note=''
     ident = 'I-' + uuid.uuid4().hex[:9]
     t = core.now()
     with _conn(path) as db:
-        db.execute('INSERT INTO ideas VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-                   (ident, title, source[:30], *vals, idea_score(*vals), 'degerlendirme', _clean(note, 400), t, t))
+        urls = [str(u)[:300] for u in sources if str(u).startswith(('https://', 'http://'))][:6]
+        db.execute('INSERT INTO ideas(id,title,source,revenue,effort,cost,fit,score,stage,note,created_at,updated_at,sources) '
+                   'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                   (ident, title, source[:30], *vals, idea_score(*vals), 'degerlendirme', _clean(note, 900), t, t,
+                    json.dumps(urls)))
     event(source, 'idea', ident, title, path)
     return ident
 
@@ -415,8 +460,78 @@ def dashboard(path=None):
         'kpi': {'pending': sum(j['status'] == 'proposed' for j in js),
                 'delivered_week': sum(j['status'] == 'accepted' and j['updated_at'][:10] >= (dt.date.today() - dt.timedelta(days=7)).isoformat() for j in js),
                 'calls_used': calls_used(path=path), 'calls_limit': s['weekly_call_limit'],
-                'calls_today': core.usage_count(), 'day_limit': core.DAY_LIMIT_DEFAULT},
+                'calls_today': core.usage_count(), 'day_limit': s['day_call_limit']},
         'finance': finance_summary(path), 'briefing': briefing(path),
         'departments': department_board(path), 'pipeline': pipeline(path),
         'approvals': [j for j in js if j['status'] in ('proposed', 'delivered')][:30],
     }
+
+
+# ---------------- learning: department lessons & routing evidence ----------------
+def _norm(text):
+    return re.sub(r'\W+', ' ', str(text).lower()).strip()[:160]
+
+
+def add_lesson(dept, text, source='', path=None):
+    """K0 learning: a short, test-backed lesson for one department (deduplicated)."""
+    if dept not in DEPARTMENTS:
+        raise ValueError('Bilinmeyen departman')
+    text = _clean(text, 240)
+    if len(text) < 10:
+        return None
+    key = _norm(text)
+    with _conn(path) as db:
+        for r in db.execute('SELECT id,text FROM lessons WHERE dept=?', (dept,)):
+            if _norm(r['text']) == key:
+                db.execute('UPDATE lessons SET hits=hits+1, updated_at=? WHERE id=?', (core.now(), r['id']))
+                return r['id']
+        ident = 'D-' + uuid.uuid4().hex[:9]
+        db.execute('INSERT INTO lessons VALUES(?,?,?,?,?,?,?)', (ident, dept, text, source[:60], 1, core.now(), core.now()))
+        n = db.execute('SELECT count(*) FROM lessons WHERE dept=?', (dept,)).fetchone()[0]
+        if n > 40:  # keep memory small: drop the least-hit oldest
+            db.execute('DELETE FROM lessons WHERE id IN (SELECT id FROM lessons WHERE dept=? '
+                       'ORDER BY hits ASC, updated_at ASC LIMIT ?)', (dept, n - 40))
+    event(dept, 'lesson', ident, text[:120], path)
+    return ident
+
+
+def lessons(dept=None, limit=40, path=None):
+    with _conn(path) as db:
+        if dept:
+            rows = db.execute('SELECT * FROM lessons WHERE dept=? ORDER BY hits DESC, updated_at DESC LIMIT ?', (dept, int(limit)))
+        else:
+            rows = db.execute('SELECT * FROM lessons ORDER BY updated_at DESC LIMIT ?', (int(limit),))
+        return [dict(r) for r in rows]
+
+
+def delete_lesson(ident, path=None):
+    with _conn(path) as db:
+        if db.execute('DELETE FROM lessons WHERE id=?', (ident,)).rowcount != 1:
+            raise KeyError('Ders bulunamadı')
+    event('patron', 'lesson-delete', ident, '', path)
+
+
+def route_result(role, provider, ok, path=None):
+    with _conn(path) as db:
+        db.execute('INSERT INTO route_stats VALUES(?,?,1,?) ON CONFLICT(role,provider) DO UPDATE SET n=n+1, ok=ok+?',
+                   (role, provider, int(bool(ok)), int(bool(ok))))
+
+
+def route_stats(path=None):
+    with _conn(path) as db:
+        return [dict(r) for r in db.execute('SELECT * FROM route_stats ORDER BY role, provider')]
+
+
+def department_report(dept, path=None):
+    """Zero-token report the owner asks for: work, budget, lessons."""
+    if dept not in DEPARTMENTS:
+        raise ValueError('Bilinmeyen departman')
+    mine = [j for j in jobs(path=path) if j['dept'] == dept]
+    with _conn(path) as db:
+        evs = [dict(r) for r in db.execute('SELECT * FROM events WHERE actor=? OR ref IN (SELECT id FROM jobs WHERE dept=?) '
+                                           'ORDER BY id DESC LIMIT 12', (dept, dept))]
+    s = settings(path)
+    return {'dept': dept, 'name': DEPARTMENTS[dept][0], 'mission': DEPARTMENTS[dept][1],
+            'week_calls': calls_used(dept, path=path), 'budget': s['budgets'].get(dept, 0),
+            'counts': {st: sum(j['status'] == st for j in mine) for st in JOB_STATES},
+            'lessons': lessons(dept, 10, path), 'recent': evs}

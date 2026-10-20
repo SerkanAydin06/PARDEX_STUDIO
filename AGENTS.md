@@ -37,6 +37,7 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - `templates/ci`: oyun depolarına kurulabilen test/radar şablonları
 - `.github/workflows`: yalnızca bu çekirdeğin otomasyonları
 - `app/hq_store.py`, `app/hq_ceo.py`, `app/hq_workers.py`, `app/hq_server.py`, `app/hq_static/`: Aşama 3 Şirket Merkezi (yerel web paneli). Her iş önerilir; patron onaylamadan çalışmaz.
+- `app/hq_projects.py`, `app/hq_router.py`, `app/hq_research.py`: Aşama 4 Proje Hattı. Ürün kodu ASLA bu depoya yazılmaz; ürünler `projects_root` altında kendi git deposundadır. Model sürüm numarası sabitlenmez, takma ad kullanılır.
 
 Öncelik listesi `docs/ROADMAP.md` içindedir. Henüz gerçekleşmemiş yeteneği tamamlandı diye yazma.
 

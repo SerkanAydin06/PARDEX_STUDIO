@@ -8,6 +8,8 @@
 
 `09_SIRKET_PANELI.cmd` dosyasına çift tıkla. Tarayıcıda sade bir **Patron Ofisi** açılır. Hedef yazarsın; CEO işleri 11 departmana böler. Her işi sen onaylar, çalıştırır ve kabul edersin. Departmanların haftalık AI çağrı bütçesi, 0 token K0 / ucuz K1 / kod için K2 kademeleri, fikir puanlama, finans defteri ve acil durdur bulunur. Telefon tarayıcısında da çalışır; yalnızca bu bilgisayardan erişilir. Ayrıntılar: [Aşama 3](docs/PHASE3_HQ.md).
 
+**Proje Hattı (Aşama 4):** `Projeler` sekmesinde Ürün Müdürüyle oyun/uygulamanın ana hatlarını konuşursun. "Bunu yap" dediğinde CEO işi paketlere böler. Ekip yazar, farklı bir AI denetler, gerekirse düzeltir ve hazır hâlini sana teslim eder. Ürünler şirket deposunun dışında, kendi git deposunda tutulur. Modeller Claude/Codex/Gemini aboneliklerine göre en ekonomik uygun şekilde seçilir; sana yalnızca önemli kararlar sorulur. Ayrıntılar: [Aşama 4](docs/PHASE4_PROJE_HATTI.md).
+
 
 > **Çalışan, test edilmiş prototip; bitmiş, sınırsız, tamamen otonom bir şirket değil.**
 
