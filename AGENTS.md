@@ -62,3 +62,8 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - Sıkı mod açıkken yerel CLI engellenir; bu sandbox sunmaz. Korumanın etrafından dolaşma.
 - Model kıyasından önce gizli olmayan aynı başlangıç kodunu parmak iziyle karşılaştır; farklı motor/sürümü eşit kabul etme.
 - JSONL token sayıları sadece kullanıcı içe aktarımıyla ve doğrulanmamış işaretiyle saklanır. Fatura, bakiye, para veya otomatik model seçimi uydurma.
+
+## Phase 2F — Operasyon vardiyası
+- AI vardiyası ancak açık sahip onayıyla ve önceden onaylanmış kesin görev kimlikleriyle başlar. Sıradaki görev değişirse dur; onay, otomatik retry, ödeme veya yayınlama yapma.
+- Varsayılan iki, teknik üst sınır üç CLI çağrısı ve doksan dakika. Proje başına bir görev; sonuçlar ayrıca kullanıcı kabulü bekler.
+- Native abonelik CLI işleri güvenli OS sandbox sayılmaz; sıkı izolasyon açıksa engellenir.
