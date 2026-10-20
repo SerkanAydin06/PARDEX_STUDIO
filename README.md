@@ -87,3 +87,7 @@ AI Genel Müdür, Normal/Kritik planlarda farklı sağlayıcıdan bir bağımsı
 
 ## 2E — Ölçüm ve güvenlik laboratuvarı (inceleme dalında)
 Sıkı izolasyon, native abonelik CLI'larını **durduran** güvenlik kapısıdır; gerçek izole AI worker değildir. Başlangıç kod parmak izi ve kullanıcı onaylı Codex CLI JSONL token aktarımı bulunur. Veriler fatura/kota veya ölçülmüş tasarruf değildir. Ayrıntılar: [2E belgesi](docs/PHASE2E_WORKER_EVIDENCE.md).
+
+## Phase 2F — AI Operasyon Müdürü
+
+`app/operations.py` çok projeli ücretsiz operasyon raporu ve **önceden tek tek onaylanmış** görevler için en fazla 2 çağrılık (teknik üst sınır 3), 45 dakikalık sınırlı çalışma vardiyası sunar. Onaylı görev kimlikleri sabitlenir; kuyruk değişirse, hata veya kota sınırı oluşursa durur. Sonuçların sahibi tarafından ayrıca kabul edilmesi gerekir. Native CLI için OS sandbox izolasyonu garanti edilmez. Ayrıntılar: `docs/PHASE2F_OPERATIONS.md`.

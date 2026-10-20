@@ -18,6 +18,7 @@ import performance
 import quality_manager
 import worker_guard
 import benchmark_lab
+import operations
 import usage_receipts
 
 BG='#0c1220'; PANEL='#172236'; PANEL2='#202e46'; FG='#ebf2ff'; SUB='#aebdd7'; BLUE='#628eea'; GREEN='#60d4ac'
@@ -550,6 +551,8 @@ class Studio(tk.Tk):
         self.btn(p,'Bağımsız QA raporu (ücretsiz)',self.manager_quality)
         self.btn(p,'A/B pilotu planla (çağrısız)',self.manager_pilot_create)
         self.btn(p,'A/B pilotlarını gör',self.manager_pilot_report)
+        self.btn(p,'Operasyon raporu (ücretsiz)',self.manager_operations)
+        self.btn(p,'Onaylı vardiyayı çalıştır (en çok 2 görev)',self.manager_shift_run)
         self.btn(p,'Seçili görevin denemesini kaydet',self.manager_pilot_record)
         safety=ttk.Frame(p);safety.pack(anchor='w',pady=5)
         ttk.Checkbutton(safety,text='Sıkı izolasyon (native AI işlemlerini durdur)',
@@ -560,6 +563,53 @@ class Studio(tk.Tk):
         self.hint(p,'Basit: 1 AI. Normal: kod + bağımsız inceleme. Kritik: plan + kod + inceleme. '
                  'Tahmini çağrı sayısı gerçek abonelik token kotası değildir.')
         self.manager_refresh()
+
+    def manager_operations(self):
+        try:
+            report=operations.board()
+            preview=operations.preview_shift(day_limit=int(self.v_day.get()))
+            lines=[f"Projeler: {report['project_count']} | Görevler: {report['total_tasks']}", '']
+            for p in report['projects'][:15]:
+                lines.append(f"{p['project_name']}: onay {p['owner_approval']}, "
+                    f"çalışmaya hazır {p['ready']}, sonuç kontrolü {p['awaiting_owner_review']}, "
+                    f"sorun {p['needs_attention']}")
+            lines.append(f"\nSıradaki vardiya: {preview['planned_calls']} AI görevi; "
+                         f"üst süre toplamı {preview['reserved_minutes']} dk. "
+                         f"Günlük kullanım: {preview['calls_today']}/{preview['day_limit']}.")
+            if preview['blocked_reason']:
+                lines.append('Sınır/engel: '+preview['blocked_reason'])
+            lines.append('\nRapor ücretsizdir. Sonuç kabulü, yeni görev onayı ve çekirdek değişikliği sana aittir.')
+            messagebox.showinfo('PARDEX AI Operasyon Müdürü','\n'.join(lines))
+        except Exception as err:messagebox.showerror('Operasyon raporu',str(err))
+
+    def manager_shift_run(self):
+        try:
+            limit=int(self.v_day.get())
+            preview=operations.preview_shift(day_limit=limit,max_cli_calls=2,max_total_minutes=45)
+            if not preview['tasks']:
+                messagebox.showinfo('AI vardiyası','Çalıştırılabilecek onaylı görev yok.\n'+
+                                   str(preview['blocked_reason'] or 'Önce görevleri onayla.'))
+                return
+            approved_ids=[x['id'] for x in preview['tasks']]
+            details='\n'.join(f"{i+1}. {x['project']} — {x['provider']} (en çok {x['max_minutes']} dk)"
+                              for i,x in enumerate(preview['tasks']))
+            if not messagebox.askyesno('AI vardiyası — açık onay',
+                    f"YALNIZCA DAHA ÖNCE ONAYLANMIŞ GÖREVLER:\n{details}\n\n"
+                    f"En fazla {len(approved_ids)} AI çağrısı, toplam 45 dk. "
+                    "AI abonelik hakkı kullanabilir. Native CLI işletim sistemi sandbox'ı DEĞİLDİR. "
+                    "Hiçbir sonuç otomatik kabul edilmez, hata sonrası tekrar yok. Başlatılsın mı?"):
+                return
+            def worker():
+                result=operations.run_shift(owner_confirms=True,
+                    authorized_task_ids=approved_ids,day_limit=limit,
+                    max_cli_calls=2,max_total_minutes=45,on_update=self.log)
+                self.log('Operasyon vardiyası tamamlandı: '+str(result))
+                self.after(0,self.queue_refresh)
+                self.after(0,lambda:messagebox.showinfo('AI vardiyası tamamlandı',
+                    f"Çalışan görev: {len(result['executed'])}\nDurma nedeni: {result['stop_reason']}\n"
+                    'Sonuçları Görev Merkezi sekmesinde ayrıca kontrol edip kabul et.'))
+            self.run_background(worker)
+        except Exception as err:messagebox.showerror('AI vardiyası başlatılamadı',str(err))
 
     def manager_strict_toggle(self):
         state=self.v_strict_workers.get()
