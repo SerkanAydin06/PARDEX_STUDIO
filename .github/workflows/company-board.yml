@@ -1,0 +1,36 @@
+name: AI Company Weekly Council
+on:
+  schedule:
+    - cron: '41 8 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: weekly-company-board
+  cancel-in-progress: false
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Create bounded council report
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python app/company_cli.py weekly > council-report.md
+      - name: Append official release metadata (non-executable)
+        run: |
+          printf '\n## Resmi teknik surum radari\n' >> council-report.md
+          python app/brain_cli.py radar >> council-report.md || echo 'Release metadata bu hafta kontrol edilemedi.' >> council-report.md
+      - name: Publish owner-approval agenda, never execute recommendations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "AI Kurul Toplantisi - $(date -u +%Y-%m-%d)" \
+            --body-file council-report.md

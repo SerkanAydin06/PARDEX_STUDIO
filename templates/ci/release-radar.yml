@@ -1,0 +1,23 @@
+name: Project Technology Radar
+on:
+  schedule:
+    - cron: '41 8 * * 4'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Gather public release metadata without secrets or AI
+        run: python .studio/ci_radar.py > studio-radar.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-radar
+          path: studio-radar.txt
+          retention-days: 30

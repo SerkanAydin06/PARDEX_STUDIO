@@ -1,0 +1,31 @@
+name: Monthly Product Strategy Review
+on:
+  schedule:
+    - cron: '13 10 3 * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Owner approval request for product portfolio and revenue experiment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > monthly.md <<'MD'
+          # Aylik urun ve gelir toplantisi
+          - [ ] Hangi oyun/uygulama gercekten kullanici geri bildirimi aldi?
+          - [ ] Oynanis, goruntu, performans kontrollerini sahip tamamlandi mi?
+          - [ ] Hangi MVP icin 14 gunluk gelistirme hedefi konacak?
+          - [ ] Ucretli altyapi gercekten gerekli mi? Resmi fiyat/fatura dogrulandi mi?
+          - [ ] Magaza komisyonu, lisans, KVKK/GDPR ve platform kurallari degerlendirildi mi?
+          - [ ] Tekrarlayan hatalara dayali cekirdek iyilestirme PR'i var mi?
+
+          Onay verilmeden satin alma / yayin / cekirdek kodu dagitimi yok.
+          MD
+          gh issue create --title "Aylik strateji ve gelir planlamasi - $(date -u +%Y-%m)" --body-file monthly.md

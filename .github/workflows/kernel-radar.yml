@@ -1,0 +1,26 @@
+name: Studio Kernel Release Radar
+on:
+  schedule:
+    - cron: '23 9 * * 2'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  releases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Query official release metadata only
+        env:
+          PYTHONPATH: app
+        run: |
+          python app/brain_cli.py radar > kernel-release-radar.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-release-radar
+          path: kernel-release-radar.txt
+          retention-days: 30

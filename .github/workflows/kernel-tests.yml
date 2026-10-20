@@ -1,0 +1,23 @@
+name: Studio Kernel Tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kernel-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Core regression tests (no cloud AI billing)
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Compile core
+        run: python -m compileall -q app

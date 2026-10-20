@@ -1,8 +1,8 @@
-# Çekirdek kararları
+# Mimari Kararlar
 
-- ADR-001: Ortak çekirdek, ayrı oyun depoları. Proje hafızası izole.
-- ADR-002: AI kod önerebilir/test eder; sahibin onayı canlı çekirdek/harcama/yayın için zorunlu.
-- ADR-003: Test temelli sürümlü öğrenme; model ağırlıklarını yeniden eğitme iddiası yok.
-- ADR-004: Az token hedefi, doğrulanan iş başına toplam maliyet ve başarının birlikte iyileşmesi.
-- ADR-005: Repo public; gizli veri, API anahtarı, oturumlar ve kişisel .studio depoya girmez.
-- ADR-006: GitHub Actions kendi başına Claude/ChatGPT/Gemini abonelik oturumlarını kullanmaz.
+- **ADR-001 / Ortak çekirdek:** Studio tek bir depoda; oyun projeleri ayrı GitHub depolarında. Çoklu oyun izolasyonu korunacak.
+- **ADR-002 / Sahip son onay:** AI konsey görüşü prod/ödeme/yayın/çekirdek kurulumuna yetki vermez.
+- **ADR-003 / Test odaklı öğrenme:** Yeni rol talimatları somut test kanıtı olmadan uygulanmaz. AI modelleri yeniden eğitilmez.
+- **ADR-004 / Token tasarrufu:** En az çağrı değil, doğrulanan başarılı iş başına toplam maliyet hedeflenir.
+- **ADR-005 / Açık repo:** Kod ve yönergeler herkese açık; gizli erişim ve kişisel proje hafızası GitHub'a gitmez.
+- **ADR-006 / GitHub Actions:** CI test/radar/iş gündemi için; gizli abonelik oturumları Actions üzerinde kullanılamaz.

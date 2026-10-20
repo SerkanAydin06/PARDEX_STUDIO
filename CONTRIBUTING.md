@@ -1,8 +1,10 @@
-# Katkı ve denetim düzeni
+# Katkı ve AI Kod İnceleme Düzeni
 
-1. `AGENTS.md` ve `docs/ROADMAP.md` oku.
-2. Tek görev için `feature/<konu>` veya `fix/<konu>` dalı aç.
-3. Kod+test+belgeyi uyumlu şekilde düzenle. `python -m unittest discover -s tests -p 'test_*.py' -v`.
-4. PR'da amaç, kapsam, test kanıtı, AI kotası/maliyet etkisi, risk ve geri alma planı belirt.
-5. Güvenlik, çekirdek ve ajan talimatı değişikliği için bağımsız ikinci AI incelemesi iste.
-6. Sahibin onayı olmadan üretim dağıtımı, ödeme, hesap oluşturma ve çekirdek sürümüne terfi yok.
+1. `AGENTS.md` oku. `docs/ROADMAP.md` içinden tek bir küçük hedef seç.
+2. `feature/<konu>` veya `fix/<konu>` dalı oluştur. Mevcut kodu koru, kopya bir 'yeni çekirdek' yazma.
+3. Kod/ test / belgeyi aynı PR'da güncelle. Uygunysa `python -m unittest discover -s tests -p 'test_*.py' -v` çalıştır.
+4. PR taslağına problem, test kanıtı, motor/işletim sistemi koşulları, risk, kota etkisi, rollback ve manuel kontrol notu ekle.
+5. Çekirdek yönergeleri, AI routing veya güvenlik değişikliğinde ikinci bağımsız inceleme iste. Önemsiz raporlar bile dış servis secret'ı taşımamalı.
+6. Gözden geçirilmemiş AI kodlarını otomatik birleştirme. Depo sahibinin onayı son karardır.
+
+GitHub Actions yalnızca çekirdek testlerini gerçek olarak doğrular. Oyuna özgü motor CI ayrı depoda kurulur.

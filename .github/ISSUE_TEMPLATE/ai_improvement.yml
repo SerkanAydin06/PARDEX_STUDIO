@@ -1,0 +1,31 @@
+name: "AI iyileştirme önerisi"
+description: "Kontrollü çekirdek, performans veya model yönlendirme önerisi"
+title: "[AI Proposal] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Kanıtlanmış problem ve tekrarlanma koşulları"
+      description: "Test, log ve birden fazla proje referansı varsa ekleyin. Gizli veri eklemeyin."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Önerilen küçük değişiklik"
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: "Karşılaştırmalı test / başarısızlık / geri alma"
+    validations:
+      required: true
+  - type: checkboxes
+    id: safeguards
+    attributes:
+      label: "Güvenlik"
+      options:
+        - label: "Harcama, canlı kurulum veya hesap erişimi otomatik yapılmayacak"
+          required: true

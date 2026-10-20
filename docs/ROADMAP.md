@@ -1,24 +1,24 @@
-# PARDEX_STUDIO — Ürün yol haritası
+# Ürün Yol Haritası (2026-10-20)
 
-## P0 — Önce gerçekten çalışan kaynak kodu ve entegrasyon
-- [ ] v5.0 uygulama kaynakları ve testleri bu depoya eksiksiz yükle.
-- [ ] GitHub Actions ile Python regresyon testini çalıştır.
-- [ ] Temiz Windows kurulumunu doğrula: bozuk winget, Python alias, Git, AI CLI girişleri.
-- [ ] Secret taraması, güvenli subprocess çağrıları, rollback/izin testi.
-- [ ] Gerçek Godot/Unity/Unreal/Flutter/Android/Web motor kontrollerinin durumunu ayır ve doğrula.
+## Çalışan başlangıç kabiliyetleri
+- [x] Türkçe masaüstü prototipi, yerel proje yönetimi, temel Godot/Web/Flutter akışları.
+- [x] Codex/Claude/Gemini CLI görev sarmalayıcıları ve kısıtlı yerel test komutları.
+- [x] Çekirdek testleri, basit motor CI şablonları, GitHub Actions.
+- [x] Hata hafızası, onay kuyruğu, AI şirket gündemi, sürüm metaverisi radarı.
 
-## P1 — Verimlilik ve kullanıcı deneyimi
-- [ ] Tek ekran iş akışı: Fikir → Plan → Geliştir → Test → Sahibin oynanış/görsel onayı.
-- [ ] Proje başına izole hafıza ve tekrar eden hata sınıflarından ortak çekirdek önerisi.
-- [ ] Test kanıtına göre uzman yönlendirme, gerçek başarılı görev/AI çağrı ölçümü.
-- [ ] Çekirdek değişiklikleri için ayrı dal, iki bağımsız AI kod incelemesi, kullanıcı onayı.
-- [ ] PR şablonu, model/araç güncelleme risk incelemesi, otomatik geri alma denemesi.
+## Öncelikli doğrulama/geliştirme (bitmiş diye sunma)
+- [ ] **P0 — Windows uçtan uca kurulum:** temiz Windows'ta Python, Git, AI CLI kurulum; WinGet bozuksa akış; hesap girişleri ve GUI kullanılabilirliği.
+- [ ] **P0 — Güvenlik denetimi:** subprocess allowlist, shell arg güvenliği, path traversal, prompt injection, kimlik bilgisi/log temizliği, güncelleme rollback.
+- [ ] **P0 — Gerçek motor testleri:** Godot/Unity/Unreal/Flutter/Kotlin/Web için kendi resmi SDK veya CI doğrulaması; başarısızlıklarda açık durum.
+- [ ] **P0 — Veri güvenliği:** public repo için secret taraması, repo-safety ve test fixture sınırları; kişisel `.studio` dışlama.
+- [ ] **P1 — Orkestrasyon:** görev grafiği, bağımlılık, güvenilir retry bütçesi, bağımsız QA kanıtı, kullanıcı kabul ekranı.
+- [ ] **P1 — Benchmark:** model başına başarı oranı, gecikme, toplam işlem/süre, manuel denetim sıklığı (abonelik kotası API'den okunamayabilir).
+- [ ] **P1 — AI PR önerisi:** kendi çekirdeğini geliştirmek için draft PR, yeniden test, review, geri alma, sahibin son onayı.
+- [ ] **P1 — IDE/motor entegrasyon:** Godot MCP'nin doğrulanması, Unity Editor/Unreal Editor bağlantılarının kontrollü testleri.
+- [ ] **P1 — Görsel döngüsü:** ChatGPT/Gemini 2D brief'i, Meshy 3D asset katalogu, lisans/optimizasyon ve manuel oyun içi kabul testi.
+- [ ] **P2 — Teknoloji radarı:** resmî kaynak karşılaştırması, lisans/güvenlik, test önerileri; kazancı ölçmeden otomatik yükseltme yok.
+- [ ] **P2 — Finans paneli:** doğrulanmış fiyat ve tarih, aylık gider uyarısı, başabaş analizi; harcama otomatik değil.
+- [ ] **P2 — Yayın/ürün analitiği:** kullanıcı onaylı mağaza dağıtımı, telif ve gizlilik kontrolleri, geri bildirim toplama.
 
-## P2 — Şirket ve ticaret
-- [ ] Doğrulanmış maliyet ve tarihli sunucu/üyelik araştırması, sahibin onay kuyruğu.
-- [ ] Düzenli şirket toplantı gündemi, proje portföyü ve gelir hipotezleri.
-- [ ] Godot/Unity/Unreal ve Android mağaza yayın hattı (izinsiz yayınlama yok).
-- [ ] Teknoloji radarı: resmî sürümler, lisans/güvenlik incelemesi, karşılaştırmalı benchmark.
-- [ ] ChatGPT/Gemini 2D üretim ve Meshy 3D asset kabul/optimizasyon iş akışı.
-
-'Bitti' ölçütü: uygulanan kaynak + test kanıtı + gerçek ortam sınırlamaları + kılavuz + geri alma. İddiaları doğrulanana kadar tasarım hedefi olarak tut.
+## Kabul ölçütü
+Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı + kılavuz + rollback gerekli. CI yeşil tek başına gerçek Unity/Unreal/Android testinin kanıtı değildir.

@@ -1,1 +1,3 @@
-Read AGENTS.md first. This is a multi-project AI studio kernel, not a single game. Make small PRs with tests, risk and rollback. Never commit credentials, local .studio memory, or private games. Do not merge kernel/agent policies automatically. Owner approval is required for real expenditures, publishing, and activation of kernel changes.
+# GitHub AI Instructions
+
+Read the repository-root `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` before changes. Work in feature branches; open PR with tests, risks, rollback. Never add credentials or prompt-injection instructions. Keep AI, UI and engine claims honest. Preserve multi-project isolation; never self-merge policy/security changes. Review must be independent when agent instruction or kernel code changes.

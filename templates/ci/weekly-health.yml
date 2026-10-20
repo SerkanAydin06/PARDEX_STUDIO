@@ -1,0 +1,23 @@
+name: Ultra Pro Studio - Haftalik Saglik
+on:
+  schedule:
+    - cron: '17 8 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Haftalik yerel dosya denetimi, harici AI yok
+        run: python .studio/ci_check.py --report > studio-health.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-health-report
+          path: studio-health.txt
+          retention-days: 30

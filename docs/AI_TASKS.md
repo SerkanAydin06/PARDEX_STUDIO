@@ -1,12 +1,16 @@
-# AI ekipleri için ilk görev dağılımı
+# AI Ekiplerine İlk Görevler
 
-Birden fazla ajan aynı dosyayı birbirinden bağımsız olarak eşzamanlı değiştirmesin. Her küçük görev ayrı branch/PR.
+Birden fazla model aynı commit'i bağımsız değiştirmesin. Her görev ayrı dal ve PR olsun.
 
-1. **Codex:** Windows kurulum ve `app/core.py` komut çağırma güvenliği incelemesi; test ekleyerek düzelt.
-2. **Claude:** Proje/çekirdek sınırları, hata hafızası ve yetki/onay modelinin mimari analizi.
-3. **Gemini:** Önceki iki ajan çıktılarında bağımsız QA; sahte başarılı test ve performans iddialarını tespit.
-4. **Codex veya diğer güvenilir ajan:** Teknik olmayan kullanıcı için arayüz kullanılabilirliği düzeltmeleri.
-5. **Bağımsız güvenlik denetçisi:** Actions izinleri, dış API/secret/log sızıntısı ve otomatik güncelleme kontrolleri.
-6. **İki ajan:** Model yönlendirme benchmark tasarımı; ölçüm olmadan 'daha ucuz' iddiası yok.
+| Sıra | Rol | Görev | Çıktı |
+|---|---|---|---|
+| 1 | Codex / kod | `app/core.py` ve PowerShell kurulumuna güvenlik + Windows sağlamlık denetimi | Kanıtlı küçük PR ve test |
+| 2 | Claude / mimari | Çekirdek/game hafıza izolasyonu ve sınırlı token kullanımı raporu | Mimari risk listesi; kod değişiyorsa ayrı PR |
+| 3 | Gemini / bağımsız QA | Gerçek ve simüle test iddialarını gözden geçir; sahte başarı durumlarını ara | Ayrıntılı QA raporu ve test önerileri |
+| 4 | Codex / GUI | Teknik olmayan kullanıcı için üç adımlı ekran: Başlat → Üret → Onayla | Kullanılabilirlik PR'ı |
+| 5 | Farklı ajan / güvenlik | Agent yetkileri, otomatik güncelleme, GitHub secret/permissions denetimi | Check-list, riskli yerler, önerilen güvenli değişiklikler |
+| 6 | İki bağımsız ajan / karar | Kısa görevler için model yönlendirme benchmark planı | Karşılaştırma yöntemi; gerçek veri gelince politika değişimi |
 
-PR açıklaması: problem, dosyalar, çalışan test komutu/çıktısı, risk, geri alma, maliyet/AI kotası, kullanıcı kabul maddesi. Ödeme, yeni hesap ve prod dağıtımı otomatik değil.
+**PR biçimi:** amaç, sınırlı dosyalar, değişen davranış, test komutları ve sonuçlar, risk/geri alma, abonelik-kota tahmini, manuel kabul gereksinimi.
+
+**Onaysız yapılmayanlar:** ücretli servis, model/API faturası, otomatik canlı kod kurulumu, hesap yaratma, lisans değişimi, PR merge ve oyun yayınlama.

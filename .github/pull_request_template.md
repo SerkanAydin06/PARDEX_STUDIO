@@ -1,18 +1,18 @@
-## Amaç
+## Amaç / Neden
 
-## Değişiklikler
+## Kapsam ve değişen dosyalar
 
-## Test kanıtı
-- [ ] Python testleri
-- [ ] Derleme/compile
-- [ ] Motor veya Windows test edilmediyse açıklandı
+## Test ve kanıtlar
+- [ ] `python -m unittest discover -s tests -p 'test_*.py' -v`
+- [ ] `python -m compileall -q app`
+- [ ] Motor/Windows/Android gerçek test edilmediyse açıklandı
 
-## Maliyet/token etkisi
+## AI/maliyet/token etkisi
 
-## Güvenlik ve riskler
+## Güvenlik, kişisel veri ve riskler
 
-## Geri alma
+## Geri alma yolu
 
-## Kullanıcının görsel/oynanış kabulü
+## Kullanıcının manuel görsel/oynanış kontrolü gereken yerler
 
-> Çekirdek/AI rol politikası değişirse bağımsız ikinci AI incelemesi ve depo sahibi onayı gerekir.
+> Çekirdek/ajan talimatı değişiyorsa ikinci AI incelemesi ve depo sahibinin onayı gerekir.
