@@ -1,0 +1,6 @@
+# PARDEX owner review for all shared-company-core changes
+* @SerkanAydin06
+/.github/CODEOWNERS @SerkanAydin06
+/.github/workflows/ @SerkanAydin06
+/app/ @SerkanAydin06
+/docs/SECURITY_PHASE1.md @SerkanAydin06

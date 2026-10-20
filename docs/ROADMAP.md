@@ -22,3 +22,14 @@
 
 ## Kabul ölçütü
 Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı + kılavuz + rollback gerekli. CI yeşil tek başına gerçek Unity/Unreal/Android testinin kanıtı değildir.
+
+
+## P0 güvenlik ilerlemesi — inceleme PR'ı
+- [x] Yeni projelerin özel .studio/ hafızasını Git dışına al; CI yardımcılarını .github/scripts/ içinde takip et.
+- [x] Staged özel dosyaları masaüstü uygulamasının GitHub ilk yayın akışında kontrol et.
+- [x] Yapay zekâ konseyi, eski ayar açık olsa bile onay olmadan çekirdek talimatı etkinleştiremez.
+- [x] Kod etkinleştirmesi GUI sahibinin açık onay bayrağını ister.
+- [x] AI tarafından değiştirilen çekirdek testleri, Docker ön yüklemesi yoksa durur; host'ta çalışmaz.
+- [ ] Docker/Windows/WSL entegrasyon testi, imaj digest sabitleme ve daha güçlü VM izolasyonu.
+- [ ] AI kodlayıcı CLI'nın yetkilerini ayrıca sınırla; sandbox yalnızca aday regresyon testini kapsıyor.
+- [ ] Geçmiş commit'lerde sızmış özel verileri/anahtarları ayrıca denetle ve gerekiyorsa sırları döndür.

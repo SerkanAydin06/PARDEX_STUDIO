@@ -8,6 +8,7 @@ import datetime as dt
 import difflib
 import hashlib
 import json
+import subprocess
 import os
 from pathlib import Path
 import shutil
@@ -76,6 +77,30 @@ def changed_files(candidate):
                   'diff':'\n'.join(difflib.unified_diff(a,b,fromfile='a/'+str(rel),tofile='b/'+str(rel)))[:12000]})
  return diffs
 
+def run_isolated_regression(candidate,timeout=110):
+ """Run AI-modified code in Docker, offline and without host home/secrets.
+
+ No Docker or missing offline image means no execution (fail closed). The
+ image is preloaded manually, never auto-pulled from untrusted sources.
+ """
+ docker=core.which('docker')
+ if not docker:
+  return subprocess.CompletedProcess([],126,'Docker guvenli calistirici bulunamadi; AI kodu host uzerinde calistirilmadi.')
+ image=os.environ.get('PARDEX_TEST_IMAGE','pardex-core-tests:3.12')
+ # Docker image tags may be mutable; production deployment should pin digest.
+ present=core.run([docker,'image','inspect',image],candidate,timeout=20,env=core.safe_env())
+ if present.returncode:
+  return subprocess.CompletedProcess([],126,'Yerel Docker imaji yok; otomatik indirme yapilmadi: '+image)
+ # A read-only mount ensures even malicious tests cannot modify the host candidate.
+ cmd=[docker,'run','--rm','--pull=never','--network','none','--read-only',
+      '--cap-drop','ALL','--security-opt','no-new-privileges',
+      '--pids-limit','100','--memory','512m','--cpus','1',
+      '--user','65534:65534', '--tmpfs','/tmp:rw,noexec,nosuid,size=128m',
+      '-e','PYTHONDONTWRITEBYTECODE=1','-e','HOME=/tmp',
+      '--mount','type=bind,source='+str(Path(candidate).resolve())+',target=/work,readonly',
+      '-w','/work',image,'python','-B','-m','unittest','discover','-s','tests','-p','test_*.py','-v']
+ return core.run(cmd,candidate,timeout=timeout,env=core.safe_env())
+
 def regression_gate(candidate,timeout=110):
  cand=Path(candidate).resolve();m=info(cand)
  if m.get('state') not in ('code-ready','tested','reviewed'):
@@ -93,9 +118,7 @@ def regression_gate(candidate,timeout=110):
   if not testcopy.exists() or p.read_bytes()!=testcopy.read_bytes():
    m['state']='rejected';m['tests']={'ok':False,'reason':'Orijinal test dosyasi degistirilmis'}
    _store(cand,m);return m['tests']
- test_home=cand/'.test-home';test_home.mkdir(exist_ok=True)
- env=core.safe_env();env['HOME']=str(test_home);env['LOCALAPPDATA']=str(test_home)
- r=core.run([sys.executable,'-m','unittest','discover','-s','tests','-p','test_*.py','-v'],cand,timeout=timeout,env=env)
+ r=run_isolated_regression(cand,timeout=timeout)
  passed=r.returncode==0
  m['tests']={'ok':passed,'exit':r.returncode,'output':brain.sanitize(r.stdout)[-1200:], 'changed':len(diffs),
              'hashes':{d['path']:hashlib.sha256((cand/d['path']).read_bytes()).hexdigest() for d in diffs} if passed else {}}
@@ -152,8 +175,9 @@ def export_candidate(candidate):
    if f.is_file() and '__pycache__' not in f.parts and '.test-home' not in f.parts:z.write(f,f.relative_to(cand.parent))
  return target
 
-def install_approved_candidate(candidate,home=None):
+def install_approved_candidate(candidate,home=None,*,owner_approved=False):
  """Human-confirmed activation after test/2 AI reviews. Transactional code backup."""
+ if owner_approved is not True:raise PermissionError('Sahip onayi olmadan cekirdek kodu kurulamaz')
  cand=Path(candidate).resolve();root=brain.initialize(home)
  if cand.parent!=(root/'candidates').resolve():raise ValueError('Sadece studyo deneme alani etkinlestirilebilir')
  if not ready_to_export(cand):raise ValueError('Cekirdek kodu degistiginden beri tum test/AI onaylari gecerli degil')

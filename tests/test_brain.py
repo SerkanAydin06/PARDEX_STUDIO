@@ -51,7 +51,7 @@ class BrainTests(unittest.TestCase):
   a=self.project('A');b=self.project('B');self.failure(a);self.failure(b)
   c=self.candidate();self.approvals(c)
   ok,why=brain.eligibility(c['id']);self.assertTrue(ok,why)
-  v=brain.activate_rule(c['id']);self.assertEqual(v,2)
+  v=brain.activate_rule(c['id'],owner_approved=True);self.assertEqual(v,2)
   self.assertIn(c['rule'],brain.role_rules('implementer'))
   self.assertEqual(len(list((self.t/'brain'/'policy_backups').glob('*.json'))),1)
  def test_reject_one_reviewer(self):
@@ -62,21 +62,21 @@ class BrainTests(unittest.TestCase):
   self.assertFalse(brain.eligibility(c['id'])[0])
  def test_one_click_rollback(self):
   self.failure(self.project('A'));self.failure(self.project('B'))
-  p=self.candidate();self.approvals(p);brain.activate_rule(p['id'])
+  p=self.candidate();self.approvals(p);brain.activate_rule(p['id'],owner_approved=True)
   self.assertEqual(brain.rollback_previous_policy(),1)
  def test_rollback_no_earlier_version(self):
   with self.assertRaises(ValueError):brain.rollback_previous_policy()
  def test_no_auto_activation_without_reviews(self):
   self.failure(self.project('A'));self.failure(self.project('B'))
   c=self.candidate()
-  with self.assertRaises(ValueError):brain.activate_rule(c['id'])
+  with self.assertRaises(ValueError):brain.activate_rule(c['id'],owner_approved=True)
  def test_no_repeat_rule(self):
   self.failure(self.project('A'));self.failure(self.project('B'))
-  c=self.candidate();self.approvals(c);brain.activate_rule(c['id'])
-  with self.assertRaises(ValueError):brain.activate_rule(c['id'])
+  c=self.candidate();self.approvals(c);brain.activate_rule(c['id'],owner_approved=True)
+  with self.assertRaises(ValueError):brain.activate_rule(c['id'],owner_approved=True)
  def test_policy_backup_rollback(self):
   self.failure(self.project('A'));self.failure(self.project('B'))
-  c=self.candidate();self.approvals(c);brain.activate_rule(c['id'])
+  c=self.candidate();self.approvals(c);brain.activate_rule(c['id'],owner_approved=True)
   b=list((self.t/'brain'/'policy_backups').glob('*.json'))[0]
   self.assertEqual(brain.revert_policy(b),1)
  def test_cannot_rollback_outside_backup(self):
@@ -174,7 +174,7 @@ class BrainTests(unittest.TestCase):
   self.assertEqual(before,(core.BASE/'app'/'core.py').read_bytes())
  def test_code_install_rejected_without_reviews(self):
   c=evolution.create_candidate('Cekirdek kod yapisini guvenle dene ve test et')
-  with self.assertRaises(ValueError):evolution.install_approved_candidate(c)
+  with self.assertRaises(ValueError):evolution.install_approved_candidate(c,owner_approved=True)
  def test_code_install_and_rollback_uses_backup(self):
   # Fake install location: never mutate the test runner's real core.
   fake=self.t/'fake_live';(fake/'app').mkdir(parents=True)
@@ -185,7 +185,7 @@ class BrainTests(unittest.TestCase):
       'tests':{'ok':True,'hashes':{'app/sample.py':__import__('hashlib').sha256(b'VALUE=2\n').hexdigest()}},
       'reviews':{'Claude':{'decision':'APPROVE','risk':'low'},'Gemini':{'decision':'APPROVE','risk':'low'}}})
   with mock.patch.object(core,'BASE',fake):
-   result=evolution.install_approved_candidate(stage)
+   result=evolution.install_approved_candidate(stage,owner_approved=True)
    self.assertIn('sample.py',result['files'][0])
    self.assertEqual((fake/'app'/'sample.py').read_text(),'VALUE=2\n')
    evolution.rollback_latest_code()
@@ -201,7 +201,55 @@ class BrainTests(unittest.TestCase):
   (stage/'app'/'sample.py').write_text('A=500\n')
   with mock.patch.object(core,'BASE',fake):
    self.assertFalse(evolution.ready_to_export(stage))
-   with self.assertRaises(ValueError):evolution.install_approved_candidate(stage)
+   with self.assertRaises(ValueError):evolution.install_approved_candidate(stage,owner_approved=True)
+ def test_auto_conseil_never_self_activates_even_if_old_flag_is_true(self):
+  brain.change_settings({'auto_council':True,'auto_text_policy':True})
+  self.failure(self.project('A'));self.failure(self.project('B'))
+  prop=self.candidate();self.approvals(prop)
+  with mock.patch.object(brain,'generate_rule_from_incidents',return_value=prop),\
+       mock.patch.object(brain,'model_review',return_value={}),\
+       mock.patch.object(brain,'eligibility',return_value=(True,'ready')):
+   result=brain.auto_council_once(day_limit=8)
+  self.assertEqual(result['status'],'proposed')
+  self.assertEqual(brain.policy()['version'],1)
+
+ def test_owner_gate_for_policy(self):
+  self.failure(self.project('A'));self.failure(self.project('B'))
+  prop=self.candidate();self.approvals(prop)
+  self.assertTrue(brain.eligibility(prop['id'])[0])
+  with self.assertRaises(PermissionError):brain.activate_rule(prop['id'])
+
+ def test_owner_gate_for_code_activation(self):
+  candidate=evolution.create_candidate('Testli ve geri alinabilir cekirdek iyilestirmesi')
+  with self.assertRaises(PermissionError):evolution.install_approved_candidate(candidate)
+
+ def test_ai_modified_tests_refuse_host_without_docker(self):
+  candidate=evolution.create_candidate('Otonom test sandbox guvenlik sertlestirme')
+  f=candidate/'app/core.py';f.write_text(f.read_text()+'\n# changed\n')
+  state=evolution.info(candidate);state['state']='code-ready';core.save_json(candidate/'CANDIDATE.json',state)
+  with mock.patch.object(core,'which',return_value=None),\
+       mock.patch.object(core,'run') as fake_run:
+   result=evolution.regression_gate(candidate)
+  self.assertFalse(result['ok'])
+  self.assertEqual(result['exit'],126)
+  fake_run.assert_not_called()
+
+ def test_isolated_runner_disables_network_and_mutation(self):
+  candidate=evolution.create_candidate('Izole test komutunu bagimsiz denetle')
+  seen=[]
+  def fake_run(args,cwd,**kwargs):
+   seen.append(args)
+   return subprocess.CompletedProcess(args,0,'OK')
+  with mock.patch.object(core,'which',return_value='/usr/bin/docker'),\
+       mock.patch.object(core,'run',side_effect=fake_run):
+   result=evolution.run_isolated_regression(candidate)
+  self.assertEqual(result.returncode,0)
+  self.assertEqual(len(seen),2)
+  self.assertIn('--network',seen[-1]);self.assertIn('none',seen[-1])
+  self.assertIn('--read-only',seen[-1]);self.assertIn('--cap-drop',seen[-1])
+  self.assertIn('--pull=never',seen[-1])
+  self.assertTrue(any(str(a).endswith(',target=/work,readonly') for a in seen[-1]))
+
  def test_settings_validation(self):
   with self.assertRaises(ValueError):brain.change_settings({'auto_council':'yes'})
  def test_sanitization_of_credentials(self):
