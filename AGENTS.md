@@ -6,7 +6,7 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 Çoklu oyun/uygulama projelerini yöneten Türkçe masaüstü stüdyosunu geliştir. Kullanıcının rolü: ürün hedeflerini tarif etmek, görüntü/oynanış testi yapmak ve dış dünya/çekirdek kararlarına son onay vermek. Projeler: Godot, Unity, Unreal, Flutter, Android/Kotlin ve web. 2D görseller ChatGPT/Gemini; 3D varlıklar Meshy aracılığıyla hazırlanır. Görsel üretim hizmetlerinin API erişimini abonelikten otomatik varsayma.
 
 ## Değişiklik protokolü
-1. Önce README.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/AI_TASKS.md ve ilgili kod/testleri oku. Bütün depoyu her görevde yeniden tarama.
+1. Önce README.md, docs/GENEL_BAKIS.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/AI_TASKS.md ve ilgili kod/testleri oku. Bütün depoyu her görevde yeniden tarama.
 2. İşi en küçük bağımsız parçalara ayır. İlgili en az dosyayı düzenle; önceki fonksiyonları koru.
 3. Kod değiştirirken test ekle/düzelt. `python -m unittest discover -s tests -p 'test_*.py' -v` ve `python -m compileall -q app` çalıştır. Test edilemeyeni açıkça söyle.
 4. Farklı motorlar için kullanılabilirlik uydurma; doğrulanmayan motor/AI bağlantısını 'doğrulanmadı' olarak işaretle.
