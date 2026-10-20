@@ -79,31 +79,20 @@ def changed_files(candidate):
                   'diff':'\n'.join(difflib.unified_diff(a,b,fromfile='a/'+str(rel),tofile='b/'+str(rel)))[:12000]})
  return diffs
 
-def run_isolated_regression(candidate,timeout=110):
- """Run AI-modified code in Docker, offline and without host home/secrets.
+def run_isolated_regression(candidate,timeout=110,*,owner_confirms=False):
+ """Use staged Docker regression; never bind the original project directory."""
+ if owner_confirms is not True:
+  return subprocess.CompletedProcess([],126,'Kullanici izni verilmedi; kod calistirilmadi')
+ image=os.environ.get('PARDEX_TEST_IMAGE','')
+ try:
+  import isolated_worker
+  result=isolated_worker.run_python_regression(candidate,image,
+    owner_confirms=True,timeout=timeout)
+ except (OSError,ValueError,RuntimeError,PermissionError) as err:
+  return subprocess.CompletedProcess([],126,'Guvenli test baslatilamadi: '+type(err).__name__)
+ return subprocess.CompletedProcess([],result['exit_code'],result['output_tail'])
 
- No Docker or missing offline image means no execution (fail closed). The
- image is preloaded manually, never auto-pulled from untrusted sources.
- """
- docker=core.which('docker')
- if not docker:
-  return subprocess.CompletedProcess([],126,'Docker guvenli calistirici bulunamadi; AI kodu host uzerinde calistirilmadi.')
- image=os.environ.get('PARDEX_TEST_IMAGE','pardex-core-tests:3.12')
- # Docker image tags may be mutable; production deployment should pin digest.
- present=core.run([docker,'image','inspect',image],candidate,timeout=20,env=core.safe_env())
- if present.returncode:
-  return subprocess.CompletedProcess([],126,'Yerel Docker imaji yok; otomatik indirme yapilmadi: '+image)
- # A read-only mount ensures even malicious tests cannot modify the host candidate.
- cmd=[docker,'run','--rm','--pull=never','--network','none','--read-only',
-      '--cap-drop','ALL','--security-opt','no-new-privileges',
-      '--pids-limit','100','--memory','512m','--cpus','1',
-      '--user','65534:65534', '--tmpfs','/tmp:rw,noexec,nosuid,size=128m',
-      '-e','PYTHONDONTWRITEBYTECODE=1','-e','HOME=/tmp',
-      '--mount','type=bind,source='+str(Path(candidate).resolve())+',target=/work,readonly',
-      '-w','/work',image,'python','-B','-m','unittest','discover','-s','tests','-p','test_*.py','-v']
- return core.run(cmd,candidate,timeout=timeout,env=core.safe_env())
-
-def regression_gate(candidate,timeout=110):
+def regression_gate(candidate,timeout=110,*,owner_confirms=False):
  cand=Path(candidate).resolve();m=info(cand)
  if m.get('state') not in ('code-ready','tested','reviewed'):
   raise ValueError('Test icin once deneme kodu olusturulmali')
@@ -120,7 +109,7 @@ def regression_gate(candidate,timeout=110):
   if not testcopy.exists() or p.read_bytes()!=testcopy.read_bytes():
    m['state']='rejected';m['tests']={'ok':False,'reason':'Orijinal test dosyasi degistirilmis'}
    _store(cand,m);return m['tests']
- r=run_isolated_regression(cand,timeout=timeout)
+ r=run_isolated_regression(cand,timeout=timeout,owner_confirms=owner_confirms)
  passed=r.returncode==0
  m['tests']={'ok':passed,'exit':r.returncode,'output':brain.sanitize(r.stdout)[-1200:], 'changed':len(diffs),
              'hashes':{d['path']:hashlib.sha256((cand/d['path']).read_bytes()).hexdigest() for d in diffs} if passed else {}}
