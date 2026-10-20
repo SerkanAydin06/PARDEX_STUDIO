@@ -1,0 +1,1 @@
+Read AGENTS.md first. This is a multi-project AI studio kernel, not a single game. Make small PRs with tests, risk and rollback. Never commit credentials, local .studio memory, or private games. Do not merge kernel/agent policies automatically. Owner approval is required for real expenditures, publishing, and activation of kernel changes.

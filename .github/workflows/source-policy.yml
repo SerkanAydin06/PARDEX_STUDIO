@@ -1,0 +1,22 @@
+name: Repository Policy Checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docs-and-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check repository guidance and personal files
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in README.md AGENTS.md CLAUDE.md GEMINI.md docs/ROADMAP.md; do test -s "$f"; done
+          if git ls-files | grep -E '(^|/)(\.env($|\.)|\.studio/|__pycache__/|id_rsa$|id_ed25519$|.*\.pem$|\.npmrc$)'; then
+            echo "Local/secret-like file tracked"; exit 1
+          fi
+          echo "Policy document checks passed"
