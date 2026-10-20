@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="pardex-token" content="__PARDEX_TOKEN__">
+<title>PARDEX Şirket Merkezi</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">P</div>
+      <div>
+        <div class="brand-name">PARDEX STUDIO</div>
+        <div class="brand-sub">Patron Ofisi</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="status-pill" class="pill">Yükleniyor…</span>
+      <button id="pause-btn" class="btn btn-ghost-dark" type="button">Acil durdur</button>
+    </div>
+  </div>
+  <nav class="wrap tabs" aria-label="Bölümler">
+    <button class="tab active" data-view="office" type="button">Ofis</button>
+    <button class="tab" data-view="jobs" type="button">İşler</button>
+    <button class="tab" data-view="ideas" type="button">Fikirler</button>
+    <button class="tab" data-view="depts" type="button">Departmanlar</button>
+    <button class="tab" data-view="finance" type="button">Finans</button>
+    <button class="tab" data-view="settings" type="button">Ayarlar</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- OFİS -->
+  <section id="view-office" class="view">
+    <div id="kpis" class="kpis"></div>
+    <div class="split">
+      <div class="card grow">
+        <div class="card-head">
+          <h2>Onay Masası</h2>
+          <span class="muted small">Sen onaylamadan hiçbir AI çağrısı, yayın veya harcama olmaz</span>
+        </div>
+        <div id="approvals" class="stack"></div>
+        <form id="goal-form" class="goal-form">
+          <label for="goal-text">Şirkete yeni hedef ver — CEO departmanlara böler</label>
+          <textarea id="goal-text" rows="2" placeholder="Örn: Fırtına Vadisi için 30 saniyelik tanıtım videosu ve itch.io mağaza sayfası hazırla"></textarea>
+          <div class="row">
+            <button class="btn btn-dark" type="submit">Planla (K0 · 0 token)</button>
+            <button id="goal-ai" class="btn btn-line" type="button">AI ile planla (1 çağrı)</button>
+          </div>
+        </form>
+      </div>
+      <aside class="card dark side">
+        <h2>CEO Brifingi</h2>
+        <div class="muted-dark small">Yerel kayıtlardan hazırlanır · 0 token</div>
+        <div id="briefing" class="stack-sm"></div>
+        <div class="tier-box">
+          <div class="muted-dark small">Token kademeleri</div>
+          <div><b>K0</b> kural, betik, test — 0 token</div>
+          <div><b>K1</b> küçük/yerel model — özet, taslak</div>
+          <div><b>K2</b> güçlü model — yalnızca kod</div>
+        </div>
+      </aside>
+    </div>
+    <h2 class="section-title">Departmanlar</h2>
+    <div id="dept-mini" class="grid-cards"></div>
+    <h2 class="section-title">Üretim Hattı: fikirden gelire</h2>
+    <div class="scroll-x"><div id="pipeline" class="pipeline"></div></div>
+  </section>
+
+  <!-- İŞLER -->
+  <section id="view-jobs" class="view" hidden>
+    <div class="card-head"><h2>Bütün işler</h2></div>
+    <div id="job-filters" class="chips" role="group" aria-label="Durum filtresi"></div>
+    <div id="job-list" class="stack"></div>
+  </section>
+
+  <!-- FİKİRLER -->
+  <section id="view-ideas" class="view" hidden>
+    <div class="card">
+      <h2>Yeni fikir</h2>
+      <form id="idea-form" class="idea-form">
+        <label for="idea-title">Fikir</label>
+        <input id="idea-title" type="text" placeholder="Örn: Ücretsiz idle madenci oyunu, reklam gelirli">
+        <div class="sliders">
+          <label>Gelir potansiyeli <output id="o-revenue">3</output><input type="range" min="1" max="5" value="3" id="s-revenue"></label>
+          <label>Bize uygunluk <output id="o-fit">3</output><input type="range" min="1" max="5" value="3" id="s-fit"></label>
+          <label>Emek <output id="o-effort">3</output><input type="range" min="1" max="5" value="3" id="s-effort"></label>
+          <label>Maliyet / token <output id="o-cost">3</output><input type="range" min="1" max="5" value="3" id="s-cost"></label>
+        </div>
+        <div class="row">
+          <span class="score">Kâr puanı: <b id="idea-score">50</b>/100</span>
+          <button class="btn btn-dark" type="submit">Fikri ekle</button>
+        </div>
+      </form>
+    </div>
+    <div class="scroll-x"><div id="idea-board" class="board"></div></div>
+  </section>
+
+  <!-- DEPARTMANLAR -->
+  <section id="view-depts" class="view" hidden>
+    <div class="card-head"><h2>Departmanlar ve bütçeler</h2><span class="muted small">Bütçe = haftalık AI çağrısı</span></div>
+    <div id="dept-full" class="grid-cards"></div>
+  </section>
+
+  <!-- FİNANS -->
+  <section id="view-finance" class="view" hidden>
+    <div id="fin-kpis" class="kpis"></div>
+    <div class="split">
+      <form id="ledger-form" class="card side">
+        <h2>Gelir / gider gir</h2>
+        <label for="l-kind">Tür</label>
+        <select id="l-kind"><option value="income">Gelir</option><option value="expense">Gider</option></select>
+        <label for="l-amount">Tutar</label>
+        <input id="l-amount" type="number" min="0" step="0.01" placeholder="0">
+        <label for="l-dept">Departman</label>
+        <select id="l-dept"></select>
+        <label for="l-note">Not</label>
+        <input id="l-note" type="text" placeholder="Örn: itch.io satış, Meshy aboneliği">
+        <button class="btn btn-dark" type="submit">Kaydet</button>
+        <p class="muted small">Gerçek fatura ve abonelik kotası otomatik okunmaz; burada senin girdiğin kayıtlar tutulur.</p>
+      </form>
+      <div class="card grow">
+        <h2>Defter</h2>
+        <div class="scroll-x"><table class="table"><thead><tr><th>Tarih</th><th>Departman</th><th>Tür</th><th>Tutar</th><th>Not</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AYARLAR -->
+  <section id="view-settings" class="view" hidden>
+    <form id="settings-form" class="card">
+      <h2>Şirket ayarları</h2>
+      <div class="form-grid">
+        <div>
+          <label for="set-project">Varsayılan proje (kod işleri burada çalışır)</label>
+          <select id="set-project"></select>
+        </div>
+        <div>
+          <label for="set-ollama">Yerel Ollama modeli (boşsa bulut CLI kullanılır)</label>
+          <input id="set-ollama" type="text" placeholder="Örn: qwen2.5:7b">
+        </div>
+        <div>
+          <label for="set-limit">Şirket haftalık AI çağrı sınırı</label>
+          <input id="set-limit" type="number" min="0" max="500">
+        </div>
+        <div>
+          <label for="set-currency">Para birimi</label>
+          <select id="set-currency"><option>TRY</option><option>USD</option><option>EUR</option></select>
+        </div>
+      </div>
+      <h3>Departman bütçeleri (haftalık çağrı)</h3>
+      <div id="budget-grid" class="form-grid"></div>
+      <div class="row"><button class="btn btn-dark" type="submit">Ayarları kaydet</button></div>
+    </form>
+    <div class="card">
+      <h2>Olay günlüğü</h2>
+      <div id="events" class="events"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="out-dialog">
+  <div class="dialog-head"><h2 id="out-title">Teslim</h2><button id="out-close" class="btn btn-line" type="button">Kapat</button></div>
+  <pre id="out-body"></pre>
+</dialog>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -36,6 +36,7 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - `app/company.py`: AI şirket/kurul işleri
 - `templates/ci`: oyun depolarına kurulabilen test/radar şablonları
 - `.github/workflows`: yalnızca bu çekirdeğin otomasyonları
+- `app/hq_store.py`, `app/hq_ceo.py`, `app/hq_workers.py`, `app/hq_server.py`, `app/hq_static/`: Aşama 3 Şirket Merkezi (yerel web paneli). Her iş önerilir; patron onaylamadan çalışmaz.
 
 Öncelik listesi `docs/ROADMAP.md` içindedir. Henüz gerçekleşmemiş yeteneği tamamlandı diye yazma.
 

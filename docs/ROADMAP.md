@@ -66,3 +66,12 @@ Bir özelliği 'bitti' işaretlemek için kod + güncel test + örnek çıktı +
 - [x] Türkçe AI Genel Müdür güvenlik ve metaveri kontrolü.
 - [ ] İzole AI worker/container/VM, imaj digest güveni, gerçek Windows/WSL deneyi.
 - [ ] Sağlayıcıların güvenilir maliyet verileri, otomatik JSONL toplayıcı, gerçek A/B pilotu.
+
+
+## Aşama 3 — PARDEX Şirket Merkezi (yerel web paneli)
+- [x] 11 departman, haftalık çağrı bütçeleri, K0/K1/K2 kademeleri, acil durdur.
+- [x] CEO K0 planlayıcı (0 token) ve isteğe bağlı tek çağrılık AI planı; kural ihlali hedeflerini engeller.
+- [x] Onay → çalıştır → teslim → kabul döngüsü; kod işleri mevcut Görev Merkezi kuyruğundan geçer.
+- [x] Fikir puanlama ve aşama tahtası, finans defteri, olay günlüğü, 0 token sabah brifingi.
+- [x] Yerel güvenli HTTP sunucu (127.0.0.1, oturum anahtarı, Host/Origin kontrolü, CSP) ve mobil uyumlu arayüz.
+- [ ] Gerçek Windows uçtan uca denemesi, video render/ses hattı, zamanlanmış haftalık departman raporları, kaynaklı web araştırması.
