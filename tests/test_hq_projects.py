@@ -238,6 +238,63 @@ class ProjectLineTests(Base):
         hp.run_production(pid, self.db, ai=ai, tester=tester)
         self.assertEqual(len(ai.calls), before)
 
+    def test_maintenance_recovers_engine_before_spending_ai(self):
+        ai = FakeAI(review_script=('PASS', 'PASS'))
+        pid = self.planned(ai)
+        p = hp.start(pid, self.db, ai=ai)
+        folder = Path(p['folder'])
+        (folder / 'project.godot').write_text('[application]\n')
+        (folder / 'export_templates').mkdir()
+        calls = []
+        def tester(f):
+            calls.append(len(ai.calls))
+            if (f / 'export_templates').exists():
+                return False, "ERROR: Cannot go into subdir 'export_templates'."
+            return True, 'Godot tests passed'
+        p = hp.run_production(pid, self.db, ai=ai, tester=tester)
+        self.assertEqual(p['stage'], 'teslim')
+        self.assertEqual(calls[0], calls[1])
+        self.assertEqual(p['packages'][0]['attempts'], 0)
+        self.assertFalse(hp.open_questions(self.db))
+
+    def test_unsuccessful_maintenance_retest_does_not_loop_or_spend_ai(self):
+        ai = FakeAI()
+        pid = self.planned(ai)
+        p = hp.start(pid, self.db, ai=ai)
+        folder = Path(p['folder'])
+        (folder / 'project.godot').write_text('[application]\n')
+        (folder / '.godot/editor').mkdir(parents=True)
+        before = len(ai.calls)
+        tester = mock.Mock(return_value=(False, 'ERROR: Safe save failed'))
+        p = hp.run_production(pid, self.db, ai=ai, tester=tester)
+        self.assertEqual(tester.call_count, 2)
+        self.assertEqual(len(ai.calls), before)
+        q = hp.open_questions(self.db)[0]
+        hp.answer(q['id'], q['options'][0], self.db)
+        hp.run_production(pid, self.db, ai=ai, tester=tester)
+        self.assertEqual(tester.call_count, 3)
+        self.assertEqual(len(ai.calls), before)
+
+    def test_test_report_write_denial_preserves_error_in_memory(self):
+        with mock.patch.object(hp.maintenance, 'plain_chain', side_effect=PermissionError('denied')):
+            result = hp._record_test_report(self.root, 'ERROR: Safe save failed')
+        self.assertIn('Safe save failed', result)
+        self.assertIn('Rapor dosyasına yazılamadı', result)
+
+    def test_repair_retest_code_error_is_not_an_environment_failure(self):
+        ai = FakeAI()
+        pid = self.planned(ai)
+        p = hp.start(pid, self.db, ai=ai)
+        folder = Path(p['folder'])
+        (folder / 'project.godot').write_text('[application]\n')
+        (folder / '.godot/editor').mkdir(parents=True)
+        tester = mock.Mock(side_effect=[(False, 'ERROR: Safe save failed'),
+                                       (False, 'SCRIPT ERROR: Unknown identifier')])
+        ok, output = hp._test_with_maintenance(pid, folder, tester, self.db)
+        self.assertFalse(ok)
+        self.assertFalse(hp._test_environment_error(output))
+        self.assertIn('Unknown identifier', output)
+
     def test_review_envelopes_and_duplicate_verdicts(self):
         good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
         self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')
