@@ -40,15 +40,40 @@ HQ_MAX_FILES = 20000
 HQ_MAX_BYTES = 2_000_000_000
 
 
+# Shared credential policy: do not treat ordinary game words as secrets.
+# Sensitive *configuration/data* with token/password/secret names is still refused.
+CREDENTIAL_NAMES = frozenset({
+    '.env', '.npmrc', '.pypirc', '.netrc', '.git-credentials',
+    'id_rsa', 'id_ed25519', 'id_ecdsa', 'credentials.json',
+    'service-account.json', 'google-services.json',
+    'google-service-info.plist', 'key.properties', 'local.properties',
+})
+CREDENTIAL_SUFFIXES = ('.pem', '.key', '.p12', '.pfx', '.jks',
+                       '.keystore', '.mobileprovision', '.p8')
+CONFIG_EXTENSIONS = frozenset({
+    '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg',
+    '.xml', '.properties', '.txt', '.csv', '.plist', '.config',
+})
+SAFE_DOTFILES = frozenset({'.gitignore', '.gitattributes', '.editorconfig', '.metadata'})
+
+
+def _secret_name(name: str) -> bool:
+    """Named secrets, credential types and suspicious data configs, not .gd/.cs gameplay files."""
+    low = str(name).casefold()
+    if (low in CREDENTIAL_NAMES or low.startswith('.env.') or
+            low.endswith(CREDENTIAL_SUFFIXES)):
+        return True
+    extension = Path(low).suffix
+    return (extension in CONFIG_EXTENSIONS and
+            ('token' in low or 'password' in low or 'credential' in low or
+             low.startswith('secret') or 'api_key' in low or 'apikey' in low))
+
+
 def _private(name: str) -> bool:
     low = name.casefold()
-    return (name.startswith('.') and name not in {'.gitignore'} or
-            low in {s.casefold() for s in SKIP_FILES} or
+    return (_secret_name(name) or low in {s.casefold() for s in SKIP_FILES} or
             low in {s.casefold() for s in SKIP_DIRS} or
-            low in {'.env', '.npmrc', '.pypirc', '.netrc'} or
-            low.startswith('.env.') or
-            ('token' in low) or ('password' in low) or
-            ('credential' in low) or low.startswith('secret') or low.endswith(('.pem', '.key', '.p12', '.pfx')))
+            (name.startswith('.') and low not in SAFE_DOTFILES))
 
 
 def _snapshot(project: Path, *, target: Path | None = None, extra_extensions=frozenset(),
@@ -73,7 +98,8 @@ def _snapshot(project: Path, *, target: Path | None = None, extra_extensions=fro
             src = current / name
             if src.is_symlink():
                 raise ValueError('Symlink file refused: ' + str(src))
-            if _private(name) or src.suffix.lower() not in allowed:
+            if _private(name) or (src.suffix.lower() not in allowed and
+                                  name.casefold() not in SAFE_DOTFILES):
                 continue
             if not src.is_file():
                 raise ValueError('Unexpected project file type')

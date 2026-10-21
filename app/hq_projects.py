@@ -9,6 +9,7 @@ import json
 import math
 import re
 import shutil
+import subprocess
 import threading
 import uuid
 from pathlib import Path
@@ -358,15 +359,15 @@ def prepare_folder(p, path=None, existing=''):
         if folder.exists():
             raise FileExistsError('Aynı isimde çalışma kopyası zaten var; üzerine yazılmadı')
         folder.mkdir(mode=0o700)
-        try:  # excludes .git, .studio, .env, credentials, symlinks; includes models/audio for engine tests
+        try:  # copy errors include disk-full OSError, not just validation failures
             _snapshot(source, target=folder, extra_extensions=ASSET_EXTENSIONS,
                       max_files=HQ_MAX_FILES, max_bytes=HQ_MAX_BYTES)
-        except ValueError:
-            shutil.rmtree(folder, ignore_errors=True)  # only the half-made copy; the original is untouched
+            if core.project_type(folder) != core.project_type(source):
+                raise ValueError('Güvenli kopyada proje giriş dosyaları eksik')
+            core.attach_project(folder, spec.get('summary', ''))
+        except Exception:
+            shutil.rmtree(folder, ignore_errors=True)  # only our newly-created copy
             raise
-        if core.project_type(folder) != core.project_type(source):
-            raise ValueError('Güvenli kopyada proje giriş dosyaları eksik')
-        core.attach_project(folder, spec.get('summary', ''))
         store.event('sistem', 'copy-existing-project', p['id'],
                     'Orijinal değiştirilmedi; ayrı çalışma kopyası: ' + str(folder), path)
     else:
@@ -388,10 +389,6 @@ def prepare_folder(p, path=None, existing=''):
 
 POLICY_FILES = frozenset({'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'SECURITY.md'})
 SECRET_DIRS = frozenset({'.git', '.studio', 'secrets', '.ssh', '.aws', '.gnupg'})
-SECRET_NAMES = frozenset({'.env', '.npmrc', '.pypirc', '.netrc', '.git-credentials', 'id_rsa', 'id_ed25519',
-                          'id_ecdsa', 'credentials.json', 'service-account.json', 'google-services.json',
-                          'GoogleService-Info.plist', 'key.properties', 'local.properties'})
-SECRET_SUFFIXES = ('.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.mobileprovision', '.p8')
 
 
 class UnsafeFiles(ValueError):
@@ -403,40 +400,52 @@ class UnsafeFiles(ValueError):
 
 
 def _secret_path(name):
-    """True only for real credential/secret locations — not game words like token_pickup or secret_level."""
+    """Same filename safety policy as HQ project snapshots, including token config data."""
+    from project_delivery import _secret_name
     parts = Path(str(name).replace('\\', '/')).parts
-    if any(p.casefold() in {d.casefold() for d in SECRET_DIRS} for p in parts[:-1]):
-        return True
-    leaf = parts[-1] if parts else ''
-    low = leaf.casefold()
-    return (low in {n.casefold() for n in SECRET_NAMES} or low.startswith('.env.') or
-            low.endswith(SECRET_SUFFIXES) or low.casefold() in {d.casefold() for d in SECRET_DIRS})
+    return (any(p.casefold() in SECRET_DIRS for p in parts) or
+            bool(parts and _secret_name(parts[-1])))
+
+
+def _git_z_paths(folder, *args, limit=4_000_000):
+    """Full NUL-terminated file list, never the 10k-char-truncated core.run output.
+
+    Bounded response, no shell and no fallback on Git failures. Needed for secret
+    audits on large game repos with thousands of files.
+    """
+    git = core.which('git')
+    if not git:
+        raise RuntimeError('Git bulunamadı; kayıt doğrulanamadı')
+    try:
+        run = subprocess.run([git, *args], cwd=str(folder),
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             timeout=60, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError('Git dosya listesi tamamlanamadı') from exc
+    if (run.returncode or len(run.stdout) > limit or
+            (run.stdout and not run.stdout.endswith(b'\0'))):
+        raise RuntimeError('Git dosya listesi eksik, çok büyük veya hatalı')
+    return [x.decode('utf-8', 'surrogateescape')
+            for x in run.stdout.split(b'\0') if x]
 
 
 def _commit(folder, message):
-    # This is invoked on PARDEX-owned copies/new projects only, never on an
-    # attached original. Refuse real secret paths even if .gitignore was changed.
-    # Enumerate paths before staging. Never stage AI policy files or secrets.
-    inventory = _git(folder, 'ls-files', '--cached', '--others', '--exclude-standard', '-z')
-    if inventory is None:
-        return False
-    if inventory.returncode or (inventory.stdout and not inventory.stdout.endswith('\0')):
-        raise RuntimeError('Git dosya listesi eksik; güvenli işlem iptal')
-    listed = list(dict.fromkeys(x for x in inventory.stdout.split('\0') if x))
-    policy = POLICY_FILES
-    unsafe = [name for name in listed if _secret_path(name) and name not in policy]
+    """Only stage audited paths in PARDEX's disposable product repository."""
+    inventory = _git_z_paths(folder, 'ls-files', '--cached', '--others',
+                             '--exclude-standard', '-z')
+    unsafe = [name for name in inventory if _secret_path(name) and name not in POLICY_FILES]
     if unsafe:
         raise UnsafeFiles(unsafe)
-    safe = [name for name in listed if name not in policy]
+    safe = [name for name in dict.fromkeys(inventory) if name not in POLICY_FILES]
     for i in range(0, len(safe), 50):
         added = _git(folder, 'add', '-A', '--', *safe[i:i + 50])
         if added is None or added.returncode:
             raise RuntimeError('Güvenli Git stage işlemi başarısız; commit yapılmadı')
-    staged = _git(folder, 'diff', '--cached', '--name-only', '-z')
-    if staged is None or staged.returncode:
+    try:
+        names = _git_z_paths(folder, 'diff', '--cached', '--name-only', '-z')
+    except RuntimeError:
         _git(folder, 'reset', '-q')
-        raise RuntimeError('Git sahnelenen dosyaları doğrulayamadı; commit iptal')
-    names = [x for x in staged.stdout.split('\0') if x]
+        raise
     bad = [n for n in names if _secret_path(n)]
     if bad:
         _git(folder, 'reset', '-q')
@@ -446,8 +455,16 @@ def _commit(folder, message):
     except RuntimeError:
         _git(folder, 'reset', '-q')
         raise
-    r = _git(folder, 'commit', '-q', '-m', message[:120])
-    return bool(r and r.returncode == 0)
+    # Nothing newly staged: previously saved product is already consistent.
+    diff = _git(folder, 'diff', '--cached', '--quiet')
+    if diff is None or diff.returncode not in (0, 1):
+        raise RuntimeError('Git kayıt farkı doğrulanamadı')
+    if diff.returncode == 0:
+        return True
+    done = _git(folder, 'commit', '-q', '-m', message[:120])
+    if done is None or done.returncode:
+        raise RuntimeError('Git commit başarısız; paket tamamlanmadı')
+    return True
 
 
 def _diff(folder, limit=6500):
@@ -632,7 +649,8 @@ def review_capacity(path=None, have=None):
 def _commit_package(pid, k, folder, path):
     """Commit a passed package. On a blocked secret file or git error, ask the owner instead of crashing."""
     try:
-        _commit(folder, f"PARDEX paket {k['seq']}: {k['title']}")
+        if _commit(folder, f"PARDEX paket {k['seq']}: {k['title']}") is not True:
+            raise RuntimeError('Git commit doğrulanamadı')
         return True
     except UnsafeFiles as exc:
         ask(pid, 'commit', f"\"{k['title']}\" kontrolden geçti ama gizli bilgi içerebilecek dosyalar oluştu: "
@@ -908,8 +926,8 @@ def answer(qid, answer_text, path=None):
             folder = Path(p['folder'])
             if a.startswith('Bu dosyaları Git dışında'):
                 files = re.findall(r'gizli bilgi içerebilecek dosyalar oluştu: (.+?)\. Hiçbir', q['text'])
-                listed = _git(folder, 'ls-files', '--others', '--exclude-standard', '-z')
-                current = [x for x in (listed.stdout if listed else '').split('\0') if x and _secret_path(x)]
+                listed = _git_z_paths(folder, 'ls-files', '--others', '--exclude-standard', '-z')
+                current = [x for x in listed if _secret_path(x)]
                 _ignore_files(folder, current or [f.strip() for f in (files[0].split(',') if files else [])])
             if _commit_package(pid, k, folder, path):
                 _pkg(kid, path, status='tamam')
