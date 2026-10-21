@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -43,9 +44,10 @@ class Checkout(unittest.TestCase):
         job = self.base / 'updates/release-test'
         job.mkdir(parents=True)
         db = self.base / 'company.sqlite3'
-        with sqlite3.connect(db) as con:
+        with closing(sqlite3.connect(db)) as con:
             con.execute('create table work (value text)')
             con.execute("insert into work values ('preserved')")
+            con.commit()
         return {'root': str(self.root), 'old': self.old, 'target': self.new, 'job': str(job),
                 'databases': [str(db)], 'nonce': 'test', 'port': 8765, 'python': sys.executable}
 
@@ -74,12 +76,13 @@ class Checkout(unittest.TestCase):
         child.poll.return_value = None
         starter = mock.Mock(return_value=child)
         def broken(*args):
-            with sqlite3.connect(plan['databases'][0]) as con:
+            with closing(sqlite3.connect(plan['databases'][0])) as con:
                 con.execute("update work set value='new migration'")
+                con.commit()
             return False
         self.assertFalse(supervisor.install(plan, starter=starter, checker=broken))
         self.assertEqual(self.git('rev-parse', 'HEAD'), self.old)
-        with sqlite3.connect(plan['databases'][0]) as con:
+        with closing(sqlite3.connect(plan['databases'][0])) as con:
             self.assertEqual(con.execute('select value from work').fetchone()[0], 'preserved')
         starter.assert_called_with(plan, health=False)
         child.terminate.assert_called_once()
