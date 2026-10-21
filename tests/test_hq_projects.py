@@ -116,6 +116,16 @@ class ProjectLineTests(Base):
         self.assertTrue(any('EPERM' in c['text'] and 'Gemini' in c['text'] for c in p['chat']))
         self.assertEqual(hp.open_questions(self.db)[0]['kind'], 'qa')
 
+    def test_review_uses_supplied_evidence_without_terminal_permission(self):
+        p = {'spec': {'summary': 'Petris', 'acceptance': ['10x20 grid']}}
+        k = {'title': 'Grid', 'detail': 'Falling piece'}
+        prompt = hp._review_prompt(p, k, '+ grid = Vector2i(10, 20)', True, 'Godot: OK', self.db)
+        self.assertIn('+ grid = Vector2i(10, 20)', prompt)
+        self.assertIn('Godot: OK', prompt)
+        self.assertIn('başka araç çağırma', prompt)
+        self.assertIn('PARDEX_QA_UNAVAILABLE=', prompt)
+        self.assertIsNone(hp._qa('PARDEX_QA_UNAVAILABLE=Kod farkı eksik, karar verilemiyor'))
+
     def test_review_envelopes_and_duplicate_verdicts(self):
         good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
         self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')
@@ -205,6 +215,15 @@ class RouterTests(Base):
         self.assertIn('dontAsk', r)
         self.assertIn('read-only', router.build_cmd('Codex', 'codex', '', 'low', 'read'))
         self.assertNotIn('yolo', ' '.join(router.build_cmd('Gemini', 'gemini', 'pro', '', 'write')))
+
+    def test_gemini_zero_exit_permission_denial_is_not_success(self):
+        import subprocess
+        notice = 'jetski: no output produced — a tool required the "command" permission that headless mode cannot prompt for'
+        fake = lambda *a, **kw: subprocess.CompletedProcess(a, 0, notice)
+        out = router.call('review', 'review evidence', self.root, 'kalite',
+                          path=self.db, runner=fake, have={'Gemini': 'agy'})
+        self.assertFalse(out['ok'])
+        self.assertIn('headless', out['output'])
 
     def test_call_records_budget_and_stops(self):
         fake = mock.Mock(return_value=mock.Mock(returncode=0, stdout='cevap'))

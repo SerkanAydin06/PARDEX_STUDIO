@@ -154,7 +154,13 @@ def call(role, prompt, cwd, dept, *, avoid=(), timeout=900, path=None, runner=No
     if cancel_check is not None and runner is None:
         call_kw['cancel_check'] = cancel_check
     r = run(cmd, Path(cwd), **call_kw)
-    good = r.returncode == 0 and bool((r.stdout or '').strip())
+    output = r.stdout or ''
+    # Antigravity can exit zero after refusing a headless permission request.
+    denied = provider == 'Gemini' and any(marker in output.lower() for marker in (
+        'jetski: no output produced',
+        'headless mode cannot prompt',
+    ))
+    good = r.returncode == 0 and bool(output.strip()) and not denied
     store.route_result(role, provider, good, path)
     return {'ok': good, 'output': core.redact_log_output(r.stdout or '')[-9000:], 'provider': provider,
             'model': model or 'hesap varsayılanı', 'effort': effort, 'reason': reason,
