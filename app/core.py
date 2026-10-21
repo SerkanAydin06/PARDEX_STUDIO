@@ -163,17 +163,79 @@ def attach_project(folder,desc=''):
     except (OSError,ValueError,ImportError): pass
     return folder,engine
 
-def run(args,cwd,timeout=60,input_data=None,env=None):
-    """No shell. Output bounded. Cancellation handled by launcher worker timeout."""
+def _stop_process_tree(proc):
+    """Terminate the cancellable AI process and its spawned children."""
+    if proc.poll() is not None:
+        return
     try:
-        r=subprocess.run([str(a) for a in args],cwd=str(cwd),input=input_data,stdout=subprocess.PIPE,
-              stderr=subprocess.STDOUT,encoding='utf-8',errors='replace',text=True,timeout=timeout,env=env,check=False)
-        r.stdout=r.stdout[-10000:]
-        return r
-    except subprocess.TimeoutExpired as e:
-        return subprocess.CompletedProcess(args,124, 'Zaman asimi ('+str(timeout)+'s). Islem durduruldu.')
+        if os.name == 'nt':
+            subprocess.run(['taskkill', '/PID', str(proc.pid), '/T', '/F'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=5, check=False)
+        else:
+            import signal
+            os.killpg(proc.pid, signal.SIGKILL)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    if proc.poll() is None:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def run(args,cwd,timeout=60,input_data=None,env=None,*,cancel_check=None):
+    """Run without shell; optionally interrupt a native AI CLI on owner stop.
+
+    The standard path stays unchanged for existing callers. Cancellable calls
+    use a dedicated process group, so a spawned CLI worker is also stopped.
+    """
+    argv = [str(a) for a in args]
+    try:
+        if cancel_check is None:
+            r=subprocess.run(argv,cwd=str(cwd),input=input_data,stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,encoding='utf-8',errors='replace',text=True,
+                  timeout=timeout,env=env,check=False)
+            r.stdout=r.stdout[-10000:]
+            return r
+        import time as _time
+        start = _time.monotonic()
+        kwargs = {'cwd': str(cwd), 'stdin': subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
+                  'stdout': subprocess.PIPE, 'stderr': subprocess.STDOUT,
+                  'encoding': 'utf-8', 'errors': 'replace', 'text': True, 'env': env}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            kwargs['start_new_session'] = True
+        proc = subprocess.Popen(argv, **kwargs)
+        try:
+            pending = input_data
+            while True:
+                if cancel_check():
+                    _stop_process_tree(proc)
+                    proc.communicate(timeout=5)
+                    return subprocess.CompletedProcess(argv, 130, 'PARDEX: patron iptal/acil durdurma')
+                remaining = timeout - (_time.monotonic() - start)
+                if remaining <= 0:
+                    _stop_process_tree(proc)
+                    proc.communicate(timeout=5)
+                    return subprocess.CompletedProcess(argv, 124, 'Zaman asimi (' + str(timeout) + 's)')
+                try:
+                    output, _ = proc.communicate(input=pending, timeout=min(0.35, remaining))
+                    return subprocess.CompletedProcess(argv, proc.returncode, (output or '')[-10000:])
+                except subprocess.TimeoutExpired:
+                    pending = None
+        finally:
+            if proc.poll() is None:
+                _stop_process_tree(proc)
+                try:
+                    proc.communicate(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(argv,124, 'Zaman asimi ('+str(timeout)+'s). Islem durduruldu.')
     except OSError as e:
-        return subprocess.CompletedProcess(args,127,'Program baslatilamadi: '+str(e))
+        return subprocess.CompletedProcess(argv,127,'Program baslatilamadi: '+str(e))
 
 def redact_log_output(output):
     """Redact common secrets from persisted AI output (defense in depth)."""

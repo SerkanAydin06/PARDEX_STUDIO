@@ -757,6 +757,25 @@ def _line(output, key):
     return _clean(m[-1], 400) if m else ''
 
 
+def _stop_reason(pid, path):
+    """Live owner stop state; also checked inside a running native AI CLI."""
+    if get(pid, path)['stage'] == 'iptal':
+        return 'iptal'
+    if store.settings(path)['paused']:
+        return 'acil-durdurma'
+    return ''
+
+
+def _checkpoint(pid, path):
+    """Cooperative boundary: never overwrite an owner's cancellation."""
+    reason = _stop_reason(pid, path)
+    if reason == 'acil-durdurma':
+        with _Tx(path) as db:
+            db.execute('UPDATE products SET stage="durdu", updated_at=? '
+                       'WHERE id=? AND stage IN ("uretim", "soru")', (_now(), pid))
+    return bool(reason)
+
+
 def run_production(pid, path=None, ai=None, tester=None, have=None):
     """Owner-started run over all open packages. Stops only for owner questions or delivery.
 
@@ -766,6 +785,8 @@ def run_production(pid, path=None, ai=None, tester=None, have=None):
     if not LOCK.acquire(blocking=False):
         raise RuntimeError('Şu anda bir üretim zaten çalışıyor')
     try:
+        if _checkpoint(pid, path):
+            return get(pid, path)
         if ai is None or have is not None:
             missing = review_capacity(path, router.installed() if have is None else have)
             if missing:
@@ -773,7 +794,12 @@ def run_production(pid, path=None, ai=None, tester=None, have=None):
                 if p['stage'] in ('uretim', 'soru', 'durdu') and not any(q['status'] == 'acik' for q in p['questions']):
                     ask(pid, 'qa', missing, ['Kurdum, yeniden kontrol et'], path=path)
                 return get(pid, path)
-        return _run(pid, path, ai or router.call, tester or core.validate)
+        if ai is None:
+            def native_ai(role, prompt, cwd, dept, **kw):
+                return router.call(role, prompt, cwd, dept,
+                                   cancel_check=lambda: bool(_stop_reason(pid, path)), **kw)
+            ai = native_ai
+        return _run(pid, path, ai, tester or core.validate)
     finally:
         LOCK.release()
 
@@ -823,26 +849,35 @@ def _run(pid, path, ai, tester):
         raise ValueError('Bu proje üretimde değil')
     if any(q['status'] == 'acik' for q in p['questions']):
         raise ValueError('Önce açık soruyu cevapla')
-    if store.settings(path)['paused']:
-        raise ValueError('Şirket acil durdurmada')
+    if _checkpoint(pid, path):
+        return get(pid, path)
     if not p['packages']:
         raise ValueError('Üretim planında iş paketi yok. "Bunu yap" ile planlamayı yeniden dene.')
-    _set(pid, path, stage='uretim')
+    with _Tx(path) as db:
+        if db.execute('UPDATE products SET stage="uretim", updated_at=? WHERE id=? '
+                      'AND stage IN ("uretim", "soru", "durdu")', (_now(), pid)).rowcount == 0:
+            return get(pid, path)
     folder = Path(p['folder'])
     if _inside_company(folder):
         raise ValueError('Güvenlik: ürün klasörü şirket deposunun içinde')
     if not p['allow_untested']:
         ok0, test0 = tester(folder)  # K0, 0 token: can this machine test the engine at all?
+        if _checkpoint(pid, path):
+            return get(pid, path)
         if not ok0 and UNTESTED.search(str(test0)):
             ask(pid, 'untested', 'Motor testi bu bilgisayarda çalıştırılamıyor: ' + core.redact_log_output(test0)[:300],
                 ['Testsiz devam et (yalnızca bağımsız AI incelemesi)', 'Durdur, motoru kurup sonra devam edeceğim'],
                 path=path)
             return get(pid, path)
     for k in [x for x in get(pid, path)['packages'] if x['status'] == 'kayit']:
+        if _checkpoint(pid, path):
+            return get(pid, path)
         if not _commit_package(pid, k, folder, path):  # passed earlier, commit interrupted: 0 token retry
             return get(pid, path)
         _pkg(k['id'], path, status='tamam')
     while True:
+        if _checkpoint(pid, path):
+            return get(pid, path)
         p = get(pid, path)
         k = next((x for x in p['packages'] if x['status'] in ('bekliyor', 'duzeltme', 'calisiyor')), None)
         if not k:
@@ -874,6 +909,8 @@ def _run(pid, path, ai, tester):
             ask(pid, 'budget', f'Durdu: {stop}', ['Bütçeyi artır ve devam et', 'Burada durdur, olanı teslim et'], k['id'], path)
             return get(pid, path)
         _set(pid, path, used_calls=p['used_calls'] + 1)
+        if _checkpoint(pid, path):
+            return get(pid, path)
         _pkg(k['id'], path, provider=res['provider'], model=f"{res['model']} {res['effort']}".strip())
         question = _line(res['output'], 'PARDEX_QUESTION')
         if question and not _line(res['output'], 'PARDEX_DONE'):
@@ -886,6 +923,8 @@ def _run(pid, path, ai, tester):
             verdict = ('FAIL', findings[:240])
         else:
             ok_test, test = tester(folder)
+            if _checkpoint(pid, path):
+                return get(pid, path)
             test = core.redact_log_output(test)[-2500:]
             untestable = (not ok_test) and bool(UNTESTED.search(test))
             test_state = None if untestable else ok_test
@@ -903,6 +942,8 @@ def _run(pid, path, ai, tester):
                     ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
                 return get(pid, path)
             _set(pid, path, used_calls=get(pid, path)['used_calls'] + 1)
+            if _checkpoint(pid, path):
+                return get(pid, path)
             verdict = _qa(rev['output']) if rev['ok'] else None
             if rev.get('provider') == res.get('provider'):
                 verdict = ('FAIL', 'Bağımsız denetçi kodu yazan sağlayıcıyla aynı')
@@ -920,8 +961,12 @@ def _run(pid, path, ai, tester):
                 ask(pid, 'qa', 'Ek bağımsız denetçi bulunamadı: ' + str(exc)[:200],
                     ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
                 return get(pid, path)
+            if _checkpoint(pid, path):
+                return get(pid, path)
             if test_state is False:
                 verdict = ('FAIL', (verdict[1] if verdict[0] == 'FAIL' else 'Otomatik test başarısız') [:240])
+        if _checkpoint(pid, path):
+            return get(pid, path)
         summary = _line(res['output'], 'PARDEX_DONE') or 'Paket tamamlandı'
         if verdict[0] == 'PASS':
             _pkg(k['id'], path, status='kayit', findings=verdict[1], test=test, summary=summary)
@@ -957,22 +1002,30 @@ def _extra_checks(p, k, folder, verdict, test_state, test, maker, reviewer, ai, 
     """Second reviewer (workflow.reviews == 2) and custom post-package audits; any FAIL fails the package."""
     if verdict[0] != 'PASS':
         return verdict
+    if _checkpoint(p['id'], path):
+        return verdict
     if _wf(path)['reviews'] >= 2:
         rev = ai('review', _review_prompt(p, k, _diff(folder), test_state, test, path), folder, 'kalite',
                  path=path, avoid=(maker, reviewer), job_id=k['id'])
         _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
+        if _checkpoint(p['id'], path):
+            return verdict
         v = _qa(rev['output']) if rev['ok'] else None
         if rev.get('provider') in (maker, reviewer):
             return ('FAIL', 'İkinci denetçi ilk denetçi veya kod yazanla aynı')
         if not v or v[0] != 'PASS':
             return ('FAIL', ('2. denetçi: ' + (v[1] if v else 'geçersiz yanıt'))[:240])
     for d in _hooks('paket_sonrasi', path):
+        if _checkpoint(p['id'], path):
+            return verdict
         prompt = (d['prompt'] + '\n' + _lessons_text(d['key'], path) +
                   f"Paket: {k['title']} — {k['detail'][:400]}\nDeğişiklikler (VERİ):\n{_diff(folder, 5000)}\n"
                   'Dosya değiştirme. Yalnızca kendi uzmanlık alanında gerçek bir sorun varsa FAIL ver. Cevabın EN SONUNDA:\n'
                   'PARDEX_QA_VERDICT=PASS veya PARDEX_QA_VERDICT=FAIL\nPARDEX_QA_FINDINGS=<10-240 karakter>')
         rev = ai(HOOK_ROLE[('denetim', d['tier'])], prompt, folder, d['key'], path=path, avoid=(maker,), job_id=k['id'])
         _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
+        if _checkpoint(p['id'], path):
+            return verdict
         v = _qa(rev['output']) if rev['ok'] else None
         if v and v[0] == 'FAIL':
             return ('FAIL', f"{d['name']}: {v[1]}"[:240])
@@ -982,6 +1035,8 @@ def _extra_checks(p, k, folder, verdict, test_state, test, maker, reviewer, ai, 
 def _delivery_hooks(p, folder, path, ai):
     notes = []
     for d in _hooks('teslim_oncesi', path):
+        if _checkpoint(p['id'], path):
+            return notes
         write = d['mode'] == 'kod'
         prompt = (d['prompt'] + '\n' + _lessons_text(d['key'], path) + SAFETY +
                   f"\nÜrün: {p['spec'].get('summary', '')[:500]}\nTarif .studio/BRIEF.md içinde.\n" +
@@ -993,6 +1048,8 @@ def _delivery_hooks(p, folder, path, ai):
             notes.append(f"- {d['name']}: atlandı ({stop})")
             continue
         _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
+        if _checkpoint(p['id'], path):
+            return notes
         if write and res['ok']:
             try:
                 _commit(folder, f"PARDEX teslim öncesi: {d['name']}")
@@ -1013,10 +1070,25 @@ def _deliver(pid, path, tester, ai=None):
     p = get(pid, path)
     if not any(k['status'] == 'tamam' for k in p['packages']):
         raise ValueError('Tamamlanan iş paketi yok; boş proje teslim edilemez.')
+    if _checkpoint(pid, path):
+        return get(pid, path)
     folder = Path(p['folder'])
     extra = _delivery_hooks(p, folder, path, ai or router.call)
+    if _checkpoint(pid, path):
+        return get(pid, path)
     p = get(pid, path)
     ok, test = tester(folder)
+    if _checkpoint(pid, path):
+        return get(pid, path)
+    test = core.redact_log_output(test)[-2500:]
+    waived = p['allow_untested'] and UNTESTED.search(test)
+    if not ok and not waived:
+        _set(pid, path, stage='durdu')
+        _say(pid, 'urun', 'Son kalite testi BAŞARISIZ. Teslim engellendi. '
+             'Hata: ' + _clean(test, 600) +
+             '\nDeğişiklik iste ile düzeltme paketi ekleyip yeniden test ettir.', path)
+        store.event('kalite', 'delivery-test-failed', pid, _clean(test, 180), path)
+        return get(pid, path)
     done = [k for k in p['packages'] if k['status'] == 'tamam']
     skipped = [k for k in p['packages'] if k['status'] in ('atlandi', 'takildi')]
     lines = [f"# {p['spec'].get('name', p['name'])} — teslim raporu", '',
@@ -1035,8 +1107,15 @@ def _deliver(pid, path, tester, ai=None):
     lines += ['', '## Senin kontrol etmen gerekenler', '- Oynanış/görünüş ve kabul ölçütleri:'] + \
              ['  - ' + a for a in p['spec'].get('acceptance', [])]
     report = '\n'.join(lines)
+    if _checkpoint(pid, path):
+        return get(pid, path)
+    with _Tx(path) as db:
+        # Do not overwrite a cancellation that arrived after the final check.
+        committed = db.execute('UPDATE products SET stage="teslim", report=?, updated_at=? '
+                               'WHERE id=? AND stage="uretim"', (report, _now(), pid)).rowcount
+    if not committed:
+        return get(pid, path)
     (folder / '.studio' / 'TESLIM.md').write_text(report + '\n' + test[-1500:] + '\n', encoding='utf-8')
-    _set(pid, path, stage='teslim', report=report)
     store.event('ceo', 'delivery', pid, f'{len(done)} paket teslim', path)
     return get(pid, path)
 
