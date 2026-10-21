@@ -14,6 +14,8 @@ Sonraki açılışlarda yalnızca `09_SIRKET_PANELI.cmd` yeterli.
 
 ## Belgeler
 
+- [Otomatik teknik bakım ve sınırları](docs/TEKNIK_BAKIM.md)
+
 - [Proje Hattı ve model seçimi](docs/PHASE4_PROJE_HATTI.md) · [GitHub Copilot Pro desteği](docs/HQ_COPILOT_CLI.md)
 - [Yönetim Kurulu: şirketi büyütmek ve yeniden yapılandırmak](docs/PHASE5_YONETIM.md)
 - [Şirket Merkezi paneli](docs/PHASE3_HQ.md)

@@ -17,6 +17,7 @@ from pathlib import Path
 import core
 import hq_router as router
 import hq_store as store
+import hq_maintenance as maintenance
 
 LOCK = threading.Lock()
 MAX_FIXES = 2
@@ -866,6 +867,14 @@ def run_production(pid, path=None, ai=None, tester=None, have=None):
                     ask(pid, 'qa', missing, ['Kurdum, yeniden kontrol et'], path=path)
                 return get(pid, path)
         return _run(pid, path, ai or _native_ai(pid, path), tester or core.validate)
+    except Exception as exc:
+        try:
+            request = maintenance.report_core_fault(exc, path)
+            if request:
+                _say(pid, 'kalite', 'Teknik bakım: çekirdek hatası Yönetim Kurulu düzeltme kuyruğuna kaydedildi: ' + request, path)
+        except Exception:
+            pass  # Never replace the original fault with a reporting failure.
+        raise
     finally:
         LOCK.release()
 
@@ -914,7 +923,28 @@ def _test_environment_error(output):
     return any(marker in text for marker in (
         'safe save failed', 'permission denied', 'access is denied',
         'erişim reddedildi', 'errno 13', 'eperm',
+        'cannot go into subdir', 'cannot load project metadata',
     ))
+
+
+def _test_with_maintenance(pid, folder, tester, path):
+    ok, output = tester(folder)
+    if _checkpoint(pid, path):
+        return ok, output
+    if ok:
+        maintenance.resolved(folder)
+    elif _test_environment_error(output):
+        changed, report = maintenance.repair(folder, output)
+        _say(pid, 'kalite', 'Teknik bakım (0 AI çağrısı):\n' + core.redact_log_output(report), path)
+        if changed and not _checkpoint(pid, path):
+            ok, output = tester(folder)
+            _say(pid, 'kalite', 'Bakım sonrası motor testi: ' + ('BAŞARILI' if ok else 'BAŞARISIZ'), path)
+            if ok:
+                maintenance.resolved(folder)
+        if not ok:
+            if _test_environment_error(output):
+                output = str(output) + '\n\nTeknik bakım raporu:\n' + report
+    return ok, output
 
 
 def _pause_test_environment(pid, folder, output, path, package=None):
@@ -924,7 +954,7 @@ def _pause_test_environment(pid, folder, output, path, package=None):
              findings='Motor dosya erişimi engellendi; kod hatası doğrulanmadı')
     _say(pid, 'kalite', 'Motor ortam hatası (AI denetimi yapılmadı):\n' + report, path)
     ask(pid, 'environment',
-        'Godot dosya kaydedemedi veya okuyamadı. Açık Godot pencerelerini kapat. '
+        'Teknik bakım denendi; motor erişim sorunu çözülemedi. Rapor proje sohbetinde. Açık Godot pencerelerini kapat. '
         'Windows Güvenliği koruma geçmişinde bu Godot dosyasının engellenip engellenmediğini kontrol et. '
         'Bu engel kod hatası sayılmadı; erişim sağlanana kadar AI çağrısı yapılmayacak.',
         ['Motor erişimini kontrol et; düzelmişse devam et'],
@@ -935,9 +965,16 @@ def _record_test_report(folder, output):
     text = core.redact_log_output(output)
     report_folder = folder / '.studio'
     report_file = report_folder / 'LAST_TEST.txt'
-    if not report_folder.is_symlink() and not report_file.is_symlink():
-        report_folder.mkdir(exist_ok=True)
+    try:
+        maintenance.plain_chain(folder)
+        if not report_folder.exists():
+            report_folder.mkdir()
+        maintenance.plain_chain(report_folder)
+        if report_file.exists() or report_file.is_symlink():
+            maintenance.plain_chain(report_file)
         report_file.write_text(text, encoding='utf-8')
+    except OSError:
+        text += '\nRapor dosyasına yazılamadı; sonuç proje sohbetinde/veritabanında korunuyor.'
     return _evidence_excerpt(text, 4000)
 
 
@@ -959,7 +996,7 @@ def _run(pid, path, ai, tester):
     if _inside_company(folder):
         raise ValueError('Güvenlik: ürün klasörü şirket deposunun içinde')
     if not p['allow_untested']:
-        ok0, test0 = tester(folder)  # K0, 0 token: can this machine test the engine at all?
+        ok0, test0 = _test_with_maintenance(pid, folder, tester, path)  # K0, 0 token: can this machine test the engine at all?
         if _checkpoint(pid, path):
             return get(pid, path)
         if not ok0 and _test_environment_error(test0):
@@ -1035,7 +1072,7 @@ def _run(pid, path, ai, tester):
             verdict = ('FAIL', findings[:240])
         else:
             _pkg(k['id'], path, status='denetim', summary=_line(res['output'], 'PARDEX_DONE') or k['summary'] or 'Kod üretildi')
-            ok_test, test = tester(folder)
+            ok_test, test = _test_with_maintenance(pid, folder, tester, path)
             if _checkpoint(pid, path):
                 return get(pid, path)
             if not ok_test and _test_environment_error(test):
