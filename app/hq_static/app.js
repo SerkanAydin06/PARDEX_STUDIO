@@ -9,7 +9,7 @@
   const DSTATE = { calisiyor: 'Çalışıyor', onay: 'Onay bekliyor', bosta: 'Boşta', durdu: 'Durduruldu' };
   let META = null, DASH = null, JOBS = [], FILTER = 'all', VIEW = 'office', poll = null, PID = '';
   const PSTAGE = { planlama: 'Planlama', uretim: 'Üretimde', soru: 'Karar bekliyor', teslim: 'Teslim edildi', tamamlandi: 'Tamamlandı', durdu: 'Durdu', iptal: 'İptal' };
-  const KSTATE = { bekliyor: 'Sırada', calisiyor: 'Çalışıyor', duzeltme: 'Düzeltmede', tamam: 'Kontrolden geçti', takildi: 'Takıldı', atlandi: 'Atlandı' };
+  const KSTATE = { bekliyor: 'Sırada', calisiyor: 'Çalışıyor', duzeltme: 'Düzeltmede', kayit: 'Kayıt bekliyor', tamam: 'Kontrolden geçti', takildi: 'Takıldı', atlandi: 'Atlandı' };
 
   async function api(path, body) {
     const opt = { headers: { 'X-PARDEX-Token': TOKEN } };
