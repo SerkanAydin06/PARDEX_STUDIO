@@ -250,7 +250,14 @@
       const f = $('#exist-folder');
       if (!confirm('Tarif dondurulacak, proje ayrı klasörde açılacak ve üretim başlayacak. CEO iş paylaşımı için 1 çağrı, sonra her paket için yaklaşık 2 çağrı kullanılır. Başlasın mı?')) return;
       t.disabled = true; t.textContent = 'CEO işleri paylaştırıyor…';
-      await act(() => api(`/api/product/${PID}/start`, { folder: f ? f.value.trim() : '' }), 'Üretim başladı'); startPoll(); return;
+      try {
+        const result = await act(() => api(`/api/product/${PID}/start`, { folder: f ? f.value.trim() : '' }), 'Üretim başladı');
+        if (result) startPoll();
+      } finally {
+        t.disabled = false;
+        t.textContent = 'Bunu yap';
+      }
+      return;
     }
     if (t.id === 'p-run') { await act(() => api(`/api/product/${PID}/run`, {}), 'Üretim sürüyor'); startPoll(); return; }
     if (t.id === 'p-accept') return act(() => api(`/api/product/${PID}/accept`, {}), 'Proje tamamlandı');
