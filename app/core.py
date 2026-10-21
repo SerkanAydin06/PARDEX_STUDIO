@@ -370,11 +370,11 @@ def validate(project,engine=None):
     if engine=='godot':
         godot=find_godot()
         if not godot: return False,'Godot kurulu/bulunur degil. Test yapilmadi.'
-        r=run([godot,'--headless','--path',str(project),'--editor','--quit'],project,timeout=120)
+        r=run([godot,'--headless','--path',str(project),'--import'],project,timeout=120)
         def passed(result):
             return result.returncode == 0 and not re.search(r'(SCRIPT ERROR|^ERROR:|Assertion failed)', result.stdout or '', re.M | re.I)
         good = passed(r)
-        reports = ['Godot çalıştırılabilir dosyası: ' + godot, 'Godot import: ' + ('OK' if good else 'HATA') + '\n' + (r.stdout or '')[-1600:]]
+        reports = ['Godot çalıştırılabilir dosyası: ' + godot, 'Godot import: ' + ('OK' if good else 'HATA') + '\n' + (r.stdout or '')[-9000:]]
         if not good:
             return False, '\n'.join(reports)
         ran = 0
