@@ -27,6 +27,17 @@ COPY_EXTENSIONS = frozenset(change_review.EXTENSIONS | {
     '.tscn', '.tres', '.godot', '.gdshader', '.cfg', '.ini', '.toml', '.xml',
     '.png', '.jpg', '.jpeg', '.webp', '.svg', '.ogg', '.wav', '.ttf', '.otf',
     '.import', '.lock', '.properties', '.gradle', '.kts', '.sh'})
+# Extra binary assets an engine needs to open/test a full working copy (3D models, audio, video,
+# textures, fonts, binary Godot/Unity/Unreal resources). Used only for HQ project copies.
+ASSET_EXTENSIONS = frozenset({
+    '.glb', '.gltf', '.bin', '.fbx', '.obj', '.mtl', '.dae', '.blend', '.stl', '.ply',
+    '.mp3', '.flac', '.aiff', '.mp4', '.webm', '.ogv',
+    '.gif', '.bmp', '.tga', '.exr', '.hdr', '.dds', '.ktx', '.ktx2', '.psd',
+    '.woff', '.woff2', '.fnt', '.csv', '.po', '.pot', '.res', '.scn', '.gdextension',
+    '.meta', '.unity', '.prefab', '.asset', '.mat', '.anim', '.controller', '.asmdef', '.physicmaterial',
+    '.uproject', '.uasset', '.umap', '.cpp', '.h', '.hpp', '.c', '.java', '.swift', '.plist', '.pro'})
+HQ_MAX_FILES = 20000
+HQ_MAX_BYTES = 2_000_000_000
 
 
 def _private(name: str) -> bool:
@@ -40,8 +51,12 @@ def _private(name: str) -> bool:
             ('credential' in low) or low.startswith('secret') or low.endswith(('.pem', '.key', '.p12', '.pfx')))
 
 
-def _snapshot(project: Path, *, target: Path | None = None):
+def _snapshot(project: Path, *, target: Path | None = None, extra_extensions=frozenset(),
+              max_files=None, max_bytes=None):
     """Copy allowlisted sources; reject symlinks; hash text files for exact change detection."""
+    allowed = COPY_EXTENSIONS | frozenset(extra_extensions)
+    max_files = MAX_SOURCE_FILES if max_files is None else max_files
+    max_bytes = MAX_SOURCE_BYTES if max_bytes is None else max_bytes
     hashes = {}
     total = 0
     files = 0
@@ -58,7 +73,7 @@ def _snapshot(project: Path, *, target: Path | None = None):
             src = current / name
             if src.is_symlink():
                 raise ValueError('Symlink file refused: ' + str(src))
-            if _private(name) or src.suffix.lower() not in COPY_EXTENSIONS:
+            if _private(name) or src.suffix.lower() not in allowed:
                 continue
             if not src.is_file():
                 raise ValueError('Unexpected project file type')
@@ -66,16 +81,16 @@ def _snapshot(project: Path, *, target: Path | None = None):
             size = src.stat().st_size
             files += 1
             total += size
-            if files > MAX_SOURCE_FILES or total > MAX_SOURCE_BYTES:
-                raise ValueError('Project too large for bounded delivery copy')
-            blob = src.read_bytes()
+            if files > max_files or total > max_bytes:
+                raise ValueError(f'Project too large for bounded copy ({files} files, {total // 1_000_000} MB)')
             # Only text source changes are applied by change_review.
-            if src.suffix.lower() in change_review.EXTENSIONS:
-                hashes[relative] = hashlib.sha256(blob).hexdigest()
+            text = src.suffix.lower() in change_review.EXTENSIONS
+            if text:
+                hashes[relative] = hashlib.sha256(src.read_bytes()).hexdigest()
             if target is not None:
                 out = target / relative
                 out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_bytes(blob)
+                shutil.copyfile(src, out)  # streamed: large models/audio are not loaded into memory
     return hashes
 
 

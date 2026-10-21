@@ -8,6 +8,7 @@ No pushing, publishing, purchasing or account creation.
 import json
 import math
 import re
+import shutil
 import threading
 import uuid
 from pathlib import Path
@@ -21,7 +22,8 @@ MAX_FIXES = 2
 MAX_PACKAGES = 8
 KINDS = ('oyun', 'uygulama')
 STAGES = ('planlama', 'uretim', 'soru', 'teslim', 'tamamlandi', 'durdu', 'iptal')
-PKG_STATES = ('bekliyor', 'calisiyor', 'duzeltme', 'tamam', 'takildi', 'atlandi')
+PKG_STATES = ('bekliyor', 'calisiyor', 'duzeltme', 'kayit', 'tamam', 'takildi', 'atlandi')
+COMMIT_OPTS = ('Bu dosyaları Git dışında bırak ve devam et', 'Kaydı yeniden dene', 'Bu paketi atla')
 ENGINES = tuple(core.ENGINE_LABELS)
 CREATABLE = ('godot', 'web', 'flutter')
 UNTESTED = re.compile(r'kurulu|bulunamad|YAPILMADI|gerekir|Bilinmeyen', re.I)
@@ -341,7 +343,7 @@ def prepare_folder(p, path=None, existing=''):
     if existing:
         # Never run an AI writer, git init/add/commit or rollback in a user's
         # live project. Import only allowed sources into a brand-new copy.
-        from project_delivery import _snapshot
+        from project_delivery import ASSET_EXTENSIONS, HQ_MAX_BYTES, HQ_MAX_FILES, _snapshot
         source = Path(existing).expanduser()
         if source.is_symlink():
             raise ValueError('Sembolik bağlantı proje klasörü kullanılamaz')
@@ -356,7 +358,12 @@ def prepare_folder(p, path=None, existing=''):
         if folder.exists():
             raise FileExistsError('Aynı isimde çalışma kopyası zaten var; üzerine yazılmadı')
         folder.mkdir(mode=0o700)
-        _snapshot(source, target=folder)  # excludes .git, .studio, .env, credentials, symlinks
+        try:  # excludes .git, .studio, .env, credentials, symlinks; includes models/audio for engine tests
+            _snapshot(source, target=folder, extra_extensions=ASSET_EXTENSIONS,
+                      max_files=HQ_MAX_FILES, max_bytes=HQ_MAX_BYTES)
+        except ValueError:
+            shutil.rmtree(folder, ignore_errors=True)  # only the half-made copy; the original is untouched
+            raise
         if core.project_type(folder) != core.project_type(source):
             raise ValueError('Güvenli kopyada proje giriş dosyaları eksik')
         core.attach_project(folder, spec.get('summary', ''))
@@ -379,10 +386,36 @@ def prepare_folder(p, path=None, existing=''):
     return folder
 
 
+POLICY_FILES = frozenset({'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'SECURITY.md'})
+SECRET_DIRS = frozenset({'.git', '.studio', 'secrets', '.ssh', '.aws', '.gnupg'})
+SECRET_NAMES = frozenset({'.env', '.npmrc', '.pypirc', '.netrc', '.git-credentials', 'id_rsa', 'id_ed25519',
+                          'id_ecdsa', 'credentials.json', 'service-account.json', 'google-services.json',
+                          'GoogleService-Info.plist', 'key.properties', 'local.properties'})
+SECRET_SUFFIXES = ('.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.mobileprovision', '.p8')
+
+
+class UnsafeFiles(ValueError):
+    """Real secret-like files would be committed; owner decides, nothing is deleted."""
+
+    def __init__(self, files):
+        self.files = list(files)
+        super().__init__('Gizli/özel dosya Git commit işleminden engellendi: ' + ', '.join(self.files[:6]))
+
+
+def _secret_path(name):
+    """True only for real credential/secret locations — not game words like token_pickup or secret_level."""
+    parts = Path(str(name).replace('\\', '/')).parts
+    if any(p.casefold() in {d.casefold() for d in SECRET_DIRS} for p in parts[:-1]):
+        return True
+    leaf = parts[-1] if parts else ''
+    low = leaf.casefold()
+    return (low in {n.casefold() for n in SECRET_NAMES} or low.startswith('.env.') or
+            low.endswith(SECRET_SUFFIXES) or low.casefold() in {d.casefold() for d in SECRET_DIRS})
+
+
 def _commit(folder, message):
     # This is invoked on PARDEX-owned copies/new projects only, never on an
-    # attached original. Refuse sensitive paths even if .gitignore was changed.
-    from project_delivery import _private
+    # attached original. Refuse real secret paths even if .gitignore was changed.
     # Enumerate paths before staging. Never stage AI policy files or secrets.
     inventory = _git(folder, 'ls-files', '--cached', '--others', '--exclude-standard', '-z')
     if inventory is None:
@@ -390,11 +423,10 @@ def _commit(folder, message):
     if inventory.returncode or (inventory.stdout and not inventory.stdout.endswith('\0')):
         raise RuntimeError('Git dosya listesi eksik; güvenli işlem iptal')
     listed = list(dict.fromkeys(x for x in inventory.stdout.split('\0') if x))
-    policy = {'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'SECURITY.md'}
-    unsafe = [name for name in listed
-              if any(_private(part) for part in Path(name).parts) and name not in policy]
+    policy = POLICY_FILES
+    unsafe = [name for name in listed if _secret_path(name) and name not in policy]
     if unsafe:
-        raise ValueError('Gizli/özel dosya Git commit işleminden engellendi: ' + ', '.join(unsafe[:6]))
+        raise UnsafeFiles(unsafe)
     safe = [name for name in listed if name not in policy]
     for i in range(0, len(safe), 50):
         added = _git(folder, 'add', '-A', '--', *safe[i:i + 50])
@@ -405,9 +437,10 @@ def _commit(folder, message):
         _git(folder, 'reset', '-q')
         raise RuntimeError('Git sahnelenen dosyaları doğrulayamadı; commit iptal')
     names = [x for x in staged.stdout.split('\0') if x]
-    if any(any(_private(part) for part in Path(name).parts) for name in names):
+    bad = [n for n in names if _secret_path(n)]
+    if bad:
         _git(folder, 'reset', '-q')
-        raise ValueError('Gizli/özel dosya Git commit işleminden engellendi')
+        raise UnsafeFiles(bad)
     try:
         core.verify_git_publish_safe(folder)
     except RuntimeError:
@@ -422,10 +455,9 @@ def _diff(folder, limit=6500):
     df = _git(folder, 'diff', 'HEAD', '--', '.', ':(exclude).studio')
     new = _git(folder, 'ls-files', '--others', '--exclude-standard')
     text = (st.stdout if st else '') + '\n' + (df.stdout if df else '')
-    from project_delivery import _private
-    for rel in ((new.stdout if new else '').split())[:6]:
-        if any(_private(part) for part in Path(rel).parts):
-            continue
+    fresh = [r for r in (new.stdout if new else '').split()
+             if r not in POLICY_FILES and not _secret_path(r)]
+    for rel in fresh[:6]:
         f = Path(folder) / rel
         if f.is_file() and f.stat().st_size < 20000:
             try:
@@ -563,14 +595,63 @@ def _line(output, key):
     return _clean(m[-1], 400) if m else ''
 
 
-def run_production(pid, path=None, ai=None, tester=None):
-    """Owner-started run over all open packages. Stops only for owner questions or delivery."""
+def run_production(pid, path=None, ai=None, tester=None, have=None):
+    """Owner-started run over all open packages. Stops only for owner questions or delivery.
+
+    With the real AI router (or an explicit `have`), independent-review capacity is checked first
+    at zero token cost, so no code call is spent when no second provider could review it.
+    """
     if not LOCK.acquire(blocking=False):
         raise RuntimeError('Şu anda bir üretim zaten çalışıyor')
     try:
+        if ai is None or have is not None:
+            missing = review_capacity(path, router.installed() if have is None else have)
+            if missing:
+                p = get(pid, path)
+                if p['stage'] in ('uretim', 'soru') and not any(q['status'] == 'acik' for q in p['questions']):
+                    ask(pid, 'qa', missing, ['Kurdum, yeniden kontrol et'], path=path)
+                return get(pid, path)
         return _run(pid, path, ai or router.call, tester or core.validate)
     finally:
         LOCK.release()
+
+
+def review_capacity(path=None, have=None):
+    """'' if enough distinct AI providers are installed for the configured independent reviews, else a reason."""
+    have = sorted(have or {})
+    need = 1 + _wf(path)['reviews']
+    if len(have) >= need:
+        return ''
+    kur = [x for x in ('Codex', 'Gemini', 'Claude') if x not in have]
+    eksik = need - len(have)
+    secim = ' veya '.join(kur) if eksik == 1 else ', '.join(kur)
+    return (f"Bağımsız kontrol için en az {need} farklı AI gerekiyor; kurulu: {', '.join(have) or 'yok'}. "
+            f"{eksik} tane daha kur ve hesabınla giriş yap: {secim}. Hiç çağrı harcanmadı.")
+
+
+def _commit_package(pid, k, folder, path):
+    """Commit a passed package. On a blocked secret file or git error, ask the owner instead of crashing."""
+    try:
+        _commit(folder, f"PARDEX paket {k['seq']}: {k['title']}")
+        return True
+    except UnsafeFiles as exc:
+        ask(pid, 'commit', f"\"{k['title']}\" kontrolden geçti ama gizli bilgi içerebilecek dosyalar oluştu: "
+            f"{', '.join(exc.files[:6])}. Hiçbir dosya silinmedi.", list(COMMIT_OPTS[::2]), k['id'], path)
+    except (RuntimeError, OSError) as exc:
+        ask(pid, 'commit', f"\"{k['title']}\" kontrolden geçti ama Git kaydı yapılamadı: {str(exc)[:200]}",
+            list(COMMIT_OPTS[1:]), k['id'], path)
+    return False
+
+
+def _ignore_files(folder, files):
+    """Keep files on disk but out of Git: append exact paths to the product's .gitignore."""
+    gi = Path(folder) / '.gitignore'
+    have = gi.read_text(encoding='utf-8').splitlines() if gi.exists() else []
+    add = ['/' + f.replace('\\', '/').lstrip('/') for f in files
+           if '\n' not in f and '/' + f.lstrip('/') not in have]
+    if add:
+        with gi.open('a', encoding='utf-8') as out:
+            out.write(('' if not have or have[-1] == '' else '\n') + '# PARDEX: patron Git dışında bıraktı\n' + '\n'.join(add) + '\n')
 
 
 def _run(pid, path, ai, tester):
@@ -592,6 +673,10 @@ def _run(pid, path, ai, tester):
                 ['Testsiz devam et (yalnızca bağımsız AI incelemesi)', 'Durdur, motoru kurup sonra devam edeceğim'],
                 path=path)
             return get(pid, path)
+    for k in [x for x in get(pid, path)['packages'] if x['status'] == 'kayit']:
+        if not _commit_package(pid, k, folder, path):  # passed earlier, commit interrupted: 0 token retry
+            return get(pid, path)
+        _pkg(k['id'], path, status='tamam')
     while True:
         p = get(pid, path)
         k = next((x for x in p['packages'] if x['status'] in ('bekliyor', 'duzeltme', 'calisiyor')), None)
@@ -667,8 +752,10 @@ def _run(pid, path, ai, tester):
                 verdict = ('FAIL', (verdict[1] if verdict[0] == 'FAIL' else 'Otomatik test başarısız') [:240])
         summary = _line(res['output'], 'PARDEX_DONE') or 'Paket tamamlandı'
         if verdict[0] == 'PASS':
-            _commit(folder, f"PARDEX paket {k['seq']}: {k['title']}")
-            _pkg(k['id'], path, status='tamam', findings=verdict[1], test=test, summary=summary)
+            _pkg(k['id'], path, status='kayit', findings=verdict[1], test=test, summary=summary)
+            if not _commit_package(pid, k, folder, path):
+                return get(pid, path)
+            _pkg(k['id'], path, status='tamam')
             if k['attempts']:
                 store.add_lesson(k['dept'], f"{k['title'][:60]}: {k['findings'][:170]}", 'kalite-düzeltme', path)
             store.event(k['dept'], 'package-done', k['id'], k['title'], path)
@@ -735,8 +822,14 @@ def _delivery_hooks(p, folder, path, ai):
             continue
         _set(p['id'], path, used_calls=get(p['id'], path)['used_calls'] + 1)
         if write and res['ok']:
-            _commit(folder, f"PARDEX teslim öncesi: {d['name']}")
-            notes.append(f"- {d['name']}: {_line(res['output'], 'PARDEX_DONE') or 'tamamlandı'}")
+            try:
+                _commit(folder, f"PARDEX teslim öncesi: {d['name']}")
+                note = _line(res['output'], 'PARDEX_DONE') or 'tamamlandı'
+            except UnsafeFiles as exc:
+                note = 'yaptı ama Git kaydı yapılmadı; gizli olabilecek dosyalar: ' + ', '.join(exc.files[:4])
+            except (RuntimeError, OSError) as exc:
+                note = 'yaptı ama Git kaydı yapılamadı: ' + str(exc)[:120]
+            notes.append(f"- {d['name']}: {note}")
         elif res['ok']:
             notes.append(f"- {d['name']}:\n{res['output'][-1500:]}")
         else:
@@ -783,8 +876,6 @@ def answer(qid, answer_text, path=None):
             raise ValueError('Tehlikeli git reset/clean işlemi kaldırıldı; kaynak dosyaların korunuyor.')
         db.execute('UPDATE questions SET status="cevaplandi", answer=? WHERE id=?', (_clean(answer_text, 600), qid))
     pid, kid, a = q['product_id'], q['package_id'], str(answer_text)
-    if q['kind'] == 'stuck' and a.startswith('Bu paketin değişikliklerini'):
-        raise ValueError('Otomatik git reset/clean veri silebilir. Bu seçenek kaldırıldı; yalnızca güvenli kopyayı elle incele.')
     p = get(pid, path)
     resume = True
     if q['kind'] == 'budget':
@@ -807,7 +898,24 @@ def answer(qid, answer_text, path=None):
         else:
             _pkg(kid, path, status='atlandi', findings='Patron atladı')
     elif q['kind'] == 'qa':
-        _pkg(kid, path, status='duzeltme')  # explicit owner action after installing a second provider
+        if kid:  # a package stopped mid-review: re-run it; preflight questions have no package
+            _pkg(kid, path, status='duzeltme')
+    elif q['kind'] == 'commit':
+        k = next((x for x in p['packages'] if x['id'] == kid), None)
+        if k and a.startswith('Bu paketi atla'):
+            _pkg(kid, path, status='atlandi', findings='Patron atladı (Git kaydı yapılmadı)')
+        elif k:
+            folder = Path(p['folder'])
+            if a.startswith('Bu dosyaları Git dışında'):
+                files = re.findall(r'gizli bilgi içerebilecek dosyalar oluştu: (.+?)\. Hiçbir', q['text'])
+                listed = _git(folder, 'ls-files', '--others', '--exclude-standard', '-z')
+                current = [x for x in (listed.stdout if listed else '').split('\0') if x and _secret_path(x)]
+                _ignore_files(folder, current or [f.strip() for f in (files[0].split(',') if files else [])])
+            if _commit_package(pid, k, folder, path):
+                _pkg(kid, path, status='tamam')
+                store.event(k['dept'], 'package-done', kid, k['title'], path)
+            else:
+                return pid, False  # a new question was asked
     elif q['kind'] == 'ai':
         k = next((x for x in p['packages'] if x['id'] == kid), None)
         if k:
@@ -821,7 +929,11 @@ def accept(pid, path=None):
     p = get(pid, path)
     if p['stage'] != 'teslim':
         raise ValueError('Teslim bekleyen proje değil')
-    _commit(Path(p['folder']), 'PARDEX: patron teslimi kabul etti')
+    try:
+        _commit(Path(p['folder']), 'PARDEX: patron teslimi kabul etti')
+    except UnsafeFiles as exc:
+        raise ValueError('Kabul kaydı yapılmadı: gizli olabilecek dosyalar var (' + ', '.join(exc.files[:4]) +
+                         '). Dosyaları kontrol et ya da değişiklik iste.') from None
     _set(pid, path, stage='tamamlandi')
     store.event('patron', 'product-accepted', pid, p['name'], path)
     return get(pid, path)

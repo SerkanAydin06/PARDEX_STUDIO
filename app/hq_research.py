@@ -45,29 +45,30 @@ def _public_ips(host):
         return []
 
 
-def reachable(url, timeout=7):
-    """Pin a public HTTPS IP; never follow redirects into local/private networks.
+MAX_REDIRECTS = 3
 
-    No urllib redirect handler: the validated IP is also the IP dialed. TLS
-    certificate verification and SNI still use the original hostname.
-    """
+
+def _target(url):
+    """Validate one URL. Returns (host, route) for a public HTTPS target, else None."""
     try:
         if not isinstance(url, str) or len(url) > 300:
-            return False
+            return None
         u = urllib.parse.urlsplit(url)
         if (u.scheme != 'https' or not u.hostname or u.username is not None or
                 u.password is not None or u.port not in (None, 443) or
-                u.fragment or u.hostname.endswith(('.local', '.internal', '.localhost'))):
-            return False
+                u.hostname.endswith(('.local', '.internal', '.localhost'))):
+            return None
         host = u.hostname.encode('idna').decode('ascii')
         if not re.fullmatch(r'[a-zA-Z0-9.-]{4,253}', host) or '.' not in host:
-            return False
+            return None
+        return host, urllib.parse.urlunsplit(('', '', u.path or '/', u.query, ''))
     except (ValueError, UnicodeError, AttributeError):
-        return False
+        return None
+
+
+def _probe(host, route, timeout):
+    """One pinned request. Returns ('ok'|'redirect'|'fail', location)."""
     ips = _public_ips(host)
-    if not ips:
-        return False
-    route = urllib.parse.urlunsplit(('', '', u.path or '/', u.query, ''))
     for ip in ips[:2]:
         for method in ('HEAD', 'GET'):
             raw = tls = conn = None
@@ -79,9 +80,12 @@ def reachable(url, timeout=7):
                 conn.request(method, route, headers={'Host': host, 'User-Agent': 'PARDEX-ArGe/1.0'})
                 response = conn.getresponse()
                 if 200 <= response.status < 300:
-                    return True
+                    return 'ok', ''
+                if response.status in (301, 302, 303, 307, 308):
+                    loc = response.getheader('Location')
+                    return ('redirect', loc) if isinstance(loc, str) and loc else ('fail', '')
                 if response.status not in (405, 501):
-                    break  # redirects are NOT followed (possible SSRF)
+                    break
             except (OSError, ValueError, ssl.SSLError, http.client.HTTPException):
                 break
             finally:
@@ -91,6 +95,29 @@ def reachable(url, timeout=7):
                     tls.close()
                 elif raw is not None:
                     raw.close()
+    return 'fail', ''
+
+
+def reachable(url, timeout=7):
+    """Does a cited page exist? Pinned public HTTPS only.
+
+    Redirects are followed at most MAX_REDIRECTS times and every hop is validated from scratch
+    (https:443, no credentials, public IPs only, fresh DNS pinned to the dialed address), so a
+    redirect can never lead into a local/private network. TLS certificates are verified.
+    """
+    if isinstance(url, str) and urllib.parse.urlsplit(url).fragment:
+        return False
+    current = url
+    for _hop in range(MAX_REDIRECTS + 1):
+        target = _target(current)
+        if not target:
+            return False
+        state, loc = _probe(*target, timeout)
+        if state == 'ok':
+            return True
+        if state != 'redirect':
+            return False
+        current = urllib.parse.urljoin(current, loc)
     return False
 
 
