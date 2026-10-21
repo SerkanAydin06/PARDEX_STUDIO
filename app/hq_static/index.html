@@ -293,6 +293,15 @@
       <div class="row"><button class="btn btn-dark" type="submit">Ayarları kaydet</button></div>
     </form>
     <div class="card">
+      <h2>Veri yönetimi</h2>
+      <p>Günlük sayaç yalnızca Pardex'in yerel çağrı sınırıdır. Sağlayıcı kotası, haftalık ve proje bütçeleri değişmez.</p>
+      <button id="admin-day-reset" class="btn btn-line" type="button">Bugünkü çağrı sayacını sıfırla</button>
+      <p>Şirketi sıfırlamak proje kayıtlarını, görev kuyruğunu, sohbetleri, finans kayıtlarını, öğrenilen notları ve şirket ayarlarını temizler. Önce yerel veritabanı yedeği alınır. Proje dosyaları, çöp kutusu, Godot yolu, proje ana klasörü, günlük sayaç ve AI girişleri korunur.</p>
+      <button id="admin-company-reset" class="btn btn-line" type="button">Şirketi sıfırla</button>
+      <h3>Pardex çöp kutusu</h3><p class="small muted">Windows çöp kutusundan ayrıdır. Projeler burada geri alınabilir; otomatik olarak silinmez.</p>
+      <div id="admin-trash"></div><p id="admin-result" role="status"></p>
+    </div>
+    <div class="card">
       <h2>Olay günlüğü</h2>
       <div id="events" class="events"></div>
     </div>

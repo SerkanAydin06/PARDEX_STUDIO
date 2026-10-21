@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core
+import hq_admin as admin
 import hq_update as updater
 import hq_board as board  # noqa: E402
 import hq_ceo  # noqa: E402
@@ -215,6 +216,7 @@ def make_handler(panel):
                     '/api/events': lambda: store.events(path=panel.db),
                     '/api/goals': lambda: store.goals(path=panel.db),
                     '/api/settings': panel.settings_view,
+                    '/api/admin/trash': lambda: admin.trash(panel.db),
                     '/api/setup': lambda: setup.status(force='force=1' in self.path),
                 }
                 m = re.fullmatch(r'/api/product/(P-[0-9a-f]{9})', p)
@@ -275,6 +277,26 @@ def make_handler(panel):
 
         def _route_impl(self, p, b):
             db, qdb = panel.db, panel.queue_db
+            if p.startswith('/api/admin/'):
+                with panel.lock:
+                    if any(x['running'] for x in (panel.run_state, panel.prod_state, panel.core_state)) or any(x.get('state') == 'running' for x in setup.JOBS.values()):
+                        raise ValueError('Önce çalışan işleri durdurun ve bitmelerini bekleyin.')
+                    import task_queue
+                    with task_queue._conn(qdb) as queue:
+                        if queue.execute("SELECT 1 FROM tasks WHERE status='running'").fetchone():
+                            raise ValueError('Görev kuyruğu çalışıyor; önce bitmesini bekleyin.')
+                    if p == '/api/admin/project-remove':
+                        return admin.remove(str(b.get('id', '')), b.get('confirmation'), b.get('files') is True, db, qdb)
+                    if p == '/api/admin/project-restore':
+                        return admin.restore(str(b.get('id', '')), db)
+                    if p == '/api/admin/company-reset':
+                        return admin.reset_company(b.get('confirmation'), db, qdb)
+                    if p == '/api/admin/day-reset':
+                        if b.get('confirmation') != 'SIFIRLA':
+                            raise ValueError('Onay için SIFIRLA yazın.')
+                        result = core.reset_daily_usage()
+                        store.event('patron', 'day-reset', '', str(result['previous']), db)
+                        return result
             if p == '/api/goal':
                 project = store.settings(db)['default_project']
                 if b.get('ai'):

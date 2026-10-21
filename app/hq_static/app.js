@@ -246,12 +246,19 @@
         </div>
         ${(p.stage === 'teslim' || p.stage === 'tamamlandi' || (p.stage === 'durdu' && !running)) ? `<form id="change-form"><label for="change-text">${p.stage === 'durdu' ? 'Değişiklik iste (ekip yeni bir paketle yeniden dener)' : 'Değişiklik iste (ekip düzeltip yeniden teslim eder)'}</label><textarea id="change-text" rows="2"></textarea><div class="row"><button class="btn btn-line" type="submit">Değişikliği gönder</button></div></form>` : ''}`;
     }
-    $('#product-detail').innerHTML = `<div class="card-head"><h2>${esc(p.name)}</h2><span class="chip">${PSTAGE[p.stage]}</span></div>${stepper(p)}${body}`;
+    $('#product-detail').innerHTML = `<div class="card-head"><h2>${esc(p.name)}</h2><span class="chip">${PSTAGE[p.stage]}</span></div>${stepper(p)}${body}<hr><div class="row"><button class="btn btn-line" id="p-remove" data-name="${esc(p.name)}" type="button" ${running ? 'disabled' : ''}>Projeyi kaldır</button>${running ? '<button class="btn btn-line" id="p-cancel" type="button">Üretimi durdur</button>' : ''}</div>`;
     bars($('#product-detail'));
     const log = $('#chat-log'); if (log) log.scrollTop = log.scrollHeight;
   }
   async function onProductClick(ev) {
     const t = ev.target.closest('button'); if (!t) return;
+    if (t.id === 'p-remove') {
+      const mode = prompt('1 = Yalnızca listeden kaldır (dosyalar kalır).\n2 = Dosyaları da Pardex çöp kutusuna taşı.\nİptal için vazgeç.', '1');
+      if (!['1', '2'].includes(mode)) return;
+      const confirmation = prompt('Onay için proje adını aynen yaz: ' + t.dataset.name);
+      if (confirmation !== t.dataset.name) return;
+      return act(async () => { const r = await api('/api/admin/project-remove', {id: PID, confirmation, files: mode === '2'}); PID = ''; $('#product-detail').innerHTML = ''; return r; }, 'Proje kaldırıldı. Ayarlar → Pardex çöp kutusundan geri alabilirsin.');
+    }
     if (t.id === 'do-it') {
       const f = $('#exist-folder');
       if (!confirm('Tarif dondurulacak, proje ayrı klasörde açılacak ve üretim başlayacak. CEO iş paylaşımı için 1 çağrı, sonra her paket için yaklaşık 2 çağrı kullanılır. Başlasın mı?')) return;
@@ -414,7 +421,7 @@
     if (VIEW === 'finance') renderFinance(DASH, await api('/api/ledger'));
     if (VIEW === 'board') renderBoard(await api('/api/board'), await api('/api/org'));
     if (VIEW === 'setup') renderSetup(await api('/api/setup'));
-    if (VIEW === 'settings') { META = await api('/api/settings'); renderSettings(META, await api('/api/events')); renderRouting(await api('/api/routing')); }
+    if (VIEW === 'settings') { META = await api('/api/settings'); renderSettings(META, await api('/api/events')); renderRouting(await api('/api/routing')); await renderTrash(); }
     if (!DASH.run.running && !DASH.production.running && poll) { clearInterval(poll); poll = null; }
   }
   function startPoll() { if (!poll) poll = setInterval(() => refresh().catch(() => {}), 3000); }
@@ -593,6 +600,24 @@
     e.preventDefault();
     const r = await act(() => api('/api/ledger', { kind: $('#l-kind').value, amount: Number($('#l-amount').value), dept: $('#l-dept').value, note: $('#l-note').value }), 'Deftere yazıldı');
     if (r) { $('#l-amount').value = ''; $('#l-note').value = ''; }
+  });
+  async function renderTrash() {
+    const rows = await api('/api/admin/trash');
+    $('#admin-trash').innerHTML = rows.length ? rows.map(r => `<div class="row"><span>${esc(r.name)} · ${esc(r.at)} · ${r.moved ? 'Dosyalar çöp kutusunda' : 'Dosyalar yerinde'}</span><button class="btn btn-line" data-restore="${esc(r.id)}" type="button">Geri al</button></div>`).join('') : 'Çöp kutusu boş.';
+  }
+  $('#admin-trash').addEventListener('click', e => {
+    const b = e.target.closest('[data-restore]');
+    if (b && confirm('Proje geri yüklensin mi? Üretim kendiliğinden başlamaz.')) act(() => api('/api/admin/project-restore', {id: b.dataset.restore}), 'Proje geri yüklendi');
+  });
+  for (const kind of ['day', 'company']) $('#admin-' + kind + '-reset').addEventListener('click', () => {
+    const confirmation = prompt(kind === 'day' ? 'Yalnızca Pardex günlük sayacı sıfırlanacak. Sağlayıcı kotası değişmez. Onay: SIFIRLA' : 'Şirket kayıtları ve görev kuyruğu yedeklenip temizlenecek. Dosyalar ve AI girişleri korunur. Onay: SIFIRLA');
+    if (confirmation !== 'SIFIRLA') return;
+    act(async () => {
+      const r = await api('/api/admin/' + kind + '-reset', {confirmation});
+      if (kind === 'company') { PID = ''; META = null; $('#product-detail').innerHTML = ''; }
+      $('#admin-result').textContent = r.backup ? r.message + ' Yedek: ' + r.backup : 'Bugünkü yerel çağrı sayacı sıfırlandı.';
+      return r;
+    }, 'İşlem tamamlandı');
   });
   $('#settings-form').addEventListener('submit', (e) => {
     e.preventDefault();

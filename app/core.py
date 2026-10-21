@@ -320,13 +320,29 @@ def active_project():
     path=state().get('active_project','')
     return Path(path) if path and Path(path).is_dir() else None
 
+USAGE_LOCK = threading.RLock()
+
 def usage_count(provider=None):
-    d=state().get('days',{}).get(today(),{})
-    return int(d.get(provider,0) if provider else sum(int(x) for x in d.values()))
+    data = state()
+    d = data.get('days', {}).get(today(), {})
+    offsets = data.get('day_offsets', {}).get(today(), {})
+    counts = {k: max(0, int(v) - int(offsets.get(k, 0))) for k, v in d.items()}
+    return counts.get(provider, 0) if provider else sum(counts.values())
+
+def reset_daily_usage():
+    with USAGE_LOCK:
+        data = state()
+        previous = usage_count()
+        data.setdefault('day_offsets', {})[today()] = dict(data.get('days', {}).get(today(), {}))
+        data.setdefault('usage_resets', []).append({'at': now(), 'previous': previous})
+        save_json(STATE, data)
+    return {'previous': previous, 'calls_today': 0}
+
 def record_usage(provider):
-    data=state(); day=data.setdefault('days',{}).setdefault(today(),{}); day[provider]=int(day.get(provider,0))+1
-    data['days']={k:v for k,v in data['days'].items() if k>= (dt.date.today()-dt.timedelta(days=21)).isoformat()}
-    save_json(STATE,data)
+    with USAGE_LOCK:
+        data=state(); day=data.setdefault('days',{}).setdefault(today(),{}); day[provider]=int(day.get(provider,0))+1
+        data['days']={k:v for k,v in data['days'].items() if k>= (dt.date.today()-dt.timedelta(days=21)).isoformat()}
+        save_json(STATE,data)
 
 def route(kind, preference='Otomatik',quality='Dengeli'):
     if preference in ('Claude','Codex','Gemini'): provider=preference
