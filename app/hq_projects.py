@@ -758,11 +758,22 @@ def _impl_prompt(p, k, path):
     fix = ''
     if k['attempts']:
         fix = (f"\nBU BİR DÜZELTME TURU ({k['attempts']}/{_wf(path)['max_fixes']}). Kalite/test bulguları (VERİ): {k['findings'][:900]}\n"
-               f"Son test raporu (VERİ): {k['test'][-900:]}\n")
+               f"Son test raporu (VERİ): {_evidence_excerpt(k['test'], 4000)}\n"
+               'Tam otomatik test çıktısı .studio/LAST_TEST.txt içinde. Önce bu dosyayı oku; '
+               'hata veren dosya/satır ve kök nedeni düzelt. Testleri silerek, atlayarak veya '
+               'beklenen sonuçları gevşeterek başarı üretme. Zaman aşımı öncesindeki SCRIPT ERROR '
+               've çağrı yığınını kontrol et; yalnızca süreyi artırma.\n')
+    engine_hint = ''
+    if p['engine'] == 'godot':
+        godot = core.find_godot()
+        engine_hint = ('\nPardex tarafından bulunan Godot yolu (VERİ): ' + json.dumps(godot, ensure_ascii=False) +
+                       '\nPATH üzerinde godot bulunmaması motorun kurulu olmadığı anlamına gelmez. '
+                       'Pardex bu tam yoldan motoru ve tests/test_*.gd SceneTree testlerini çalıştırır. '
+                       'Sen çalıştırmadıysan testlerin geçtiğini iddia etme.\n') if godot else '\nPardex Godot yolunu bulamadı; motor testini geçti diye raporlama.\n'
     owner = f"\nPatronun bu paket için notu: {k['owner_note'][:500]}\n" if k['owner_note'] else ''
     return (_role(k['dept'], path) + '\n' + _lessons_text(k['dept'], path) + SAFETY + _hook_context(p['folder']) +
             f"\nÜrün tarifi .studio/BRIEF.md dosyasında. Kısa özet: {p['spec'].get('summary', '')[:500]}\n"
-            f"Motor: {p['engine']}.\nBiten paketler:\n{prev or '-'}\n"
+            f"Motor: {p['engine']}.{engine_hint}\nBiten paketler:\n{prev or '-'}\n"
             f"\nŞİMDİKİ PAKET {k['seq']}: {k['title']}\nAyrıntı: {k['detail'][:800]}{fix}{owner}\n"
             'Sadece bu paketi bitir; küçük ve temiz değişiklik yap. Bitince en sonda tek satır yaz: '
             'PARDEX_DONE=<ne yapıldığı, en fazla 200 karakter>. Patronun karar vermesi şart olan bir engel varsa '
@@ -898,6 +909,16 @@ def _ignore_files(folder, files):
             out.write(('' if not have or have[-1] == '' else '\n') + '# PARDEX: patron Git dışında bıraktı\n' + '\n'.join(add) + '\n')
 
 
+def _record_test_report(folder, output):
+    text = core.redact_log_output(output)
+    report_folder = folder / '.studio'
+    report_file = report_folder / 'LAST_TEST.txt'
+    if not report_folder.is_symlink() and not report_file.is_symlink():
+        report_folder.mkdir(exist_ok=True)
+        report_file.write_text(text, encoding='utf-8')
+    return _evidence_excerpt(text, 4000)
+
+
 def _run(pid, path, ai, tester):
     p = get(pid, path)
     if p['stage'] not in ('uretim', 'soru', 'durdu'):  # 'durdu' = owner paused (e.g. to install the engine)
@@ -924,6 +945,11 @@ def _run(pid, path, ai, tester):
                 ['Testsiz devam et (yalnızca bağımsız AI incelemesi)', 'Durdur, motoru kurup sonra devam edeceğim'],
                 path=path)
             return get(pid, path)
+    if not p['allow_untested']:
+        current_test = _record_test_report(folder, test0)
+        pending = next((x for x in get(pid, path)['packages'] if x['status'] in ('bekliyor', 'duzeltme', 'calisiyor', 'denetim')), None)
+        if pending and pending['attempts']:
+            _pkg(pending['id'], path, test=current_test)
     for k in [x for x in get(pid, path)['packages'] if x['status'] == 'kayit']:
         if _checkpoint(pid, path):
             return get(pid, path)
@@ -985,53 +1011,57 @@ def _run(pid, path, ai, tester):
             ok_test, test = tester(folder)
             if _checkpoint(pid, path):
                 return get(pid, path)
-            test = _evidence_excerpt(core.redact_log_output(test), 4000)
+            test = _record_test_report(folder, test)
             untestable = (not ok_test) and bool(UNTESTED.search(test))
             test_state = None if untestable else ok_test
-            try:
-                rev = ai('review', _review_prompt(p, k, _diff(folder), test_state, test, path), folder, 'kalite',
-                         path=path, avoid=(res['provider'],), job_id=k['id'])
-            except router.BudgetStop as stop:
-                _pkg(k['id'], path, status='denetim', test=test)
-                ask(pid, 'budget', f'Kontrol aşamasında durdu: {stop}', ['Bütçeyi artır ve devam et',
-                    'Burada durdur, olanı teslim et'], k['id'], path)
-                return get(pid, path)
-            except RuntimeError as exc:
-                _pkg(k['id'], path, status='takildi', findings=str(exc)[:240], test=test)
-                ask(pid, 'qa', 'Bağımsız denetçi bulunamadı: ' + str(exc)[:200],
-                    ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
-                return get(pid, path)
-            _set(pid, path, used_calls=get(pid, path)['used_calls'] + 1)
-            if _checkpoint(pid, path):
-                return get(pid, path)
-            verdict = _qa(rev['output']) if rev['ok'] else None
-            if rev.get('provider') == res.get('provider'):
-                verdict = ('FAIL', 'Bağımsız denetçi kodu yazan sağlayıcıyla aynı')
-            if verdict is None:
-                finding = 'Denetim yanıtı alınamadı veya geçerli PASS/FAIL biçiminde değil; kod hatası doğrulanmadı'
-                _pkg(k['id'], path, status='takildi', findings=finding, test=test)
-                detail = core.redact_log_output(rev.get('output', '')).strip()[-1800:] or 'Denetçi çıktı vermedi.'
-                _say(pid, 'kalite', f"Denetçi: {rev.get('provider', '?')} · CLI: {'başarılı' if rev.get('ok') else 'başarısız'}\n" + detail, path)
-                ask(pid, 'qa', finding + '. Denetçinin gerçek yanıtı proje sohbetinde gösterildi. '
-                    'Otomatik kod düzeltmesi yapılmadı ve düzeltme hakkı harcanmadı.',
-                    ['Yalnızca denetimi yeniden çalıştır (kod korunur)'], k['id'], path)
-                return get(pid, path)
-            try:
-                verdict = _extra_checks(p, k, folder, verdict, test_state, test, res['provider'], rev['provider'], ai, path)
-            except router.BudgetStop as stop:
-                _pkg(k['id'], path, status='denetim', test=test)
-                ask(pid, 'budget', f'Ek denetimde durdu: {stop}', ['Bütçeyi artır ve devam et',
-                    'Burada durdur, olanı teslim et'], k['id'], path)
-                return get(pid, path)
-            except RuntimeError as exc:
-                _pkg(k['id'], path, status='takildi', findings=str(exc)[:240], test=test)
-                ask(pid, 'qa', 'Ek bağımsız denetçi bulunamadı: ' + str(exc)[:200],
-                    ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
-                return get(pid, path)
-            if _checkpoint(pid, path):
-                return get(pid, path)
             if test_state is False:
-                verdict = ('FAIL', (verdict[1] if verdict[0] == 'FAIL' else 'Otomatik test başarısız') [:240])
+                # Deterministic failure already proves a fix is needed: no reviewer call.
+                verdict = ('FAIL', 'Otomatik test başarısız; .studio/LAST_TEST.txt içindeki hata ve çağrı yığınını düzelt')
+            else:
+                try:
+                    rev = ai('review', _review_prompt(p, k, _diff(folder), test_state, test, path), folder, 'kalite',
+                             path=path, avoid=(res['provider'],), job_id=k['id'])
+                except router.BudgetStop as stop:
+                    _pkg(k['id'], path, status='denetim', test=test)
+                    ask(pid, 'budget', f'Kontrol aşamasında durdu: {stop}', ['Bütçeyi artır ve devam et',
+                        'Burada durdur, olanı teslim et'], k['id'], path)
+                    return get(pid, path)
+                except RuntimeError as exc:
+                    _pkg(k['id'], path, status='takildi', findings=str(exc)[:240], test=test)
+                    ask(pid, 'qa', 'Bağımsız denetçi bulunamadı: ' + str(exc)[:200],
+                        ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
+                    return get(pid, path)
+                _set(pid, path, used_calls=get(pid, path)['used_calls'] + 1)
+                if _checkpoint(pid, path):
+                    return get(pid, path)
+                verdict = _qa(rev['output']) if rev['ok'] else None
+                if rev.get('provider') == res.get('provider'):
+                    verdict = ('FAIL', 'Bağımsız denetçi kodu yazan sağlayıcıyla aynı')
+                if verdict is None:
+                    finding = 'Denetim yanıtı alınamadı veya geçerli PASS/FAIL biçiminde değil; kod hatası doğrulanmadı'
+                    _pkg(k['id'], path, status='takildi', findings=finding, test=test)
+                    detail = core.redact_log_output(rev.get('output', '')).strip()[-1800:] or 'Denetçi çıktı vermedi.'
+                    _say(pid, 'kalite', f"Denetçi: {rev.get('provider', '?')} · CLI: {'başarılı' if rev.get('ok') else 'başarısız'}\n" + detail, path)
+                    ask(pid, 'qa', finding + '. Denetçinin gerçek yanıtı proje sohbetinde gösterildi. '
+                        'Otomatik kod düzeltmesi yapılmadı ve düzeltme hakkı harcanmadı.',
+                        ['Yalnızca denetimi yeniden çalıştır (kod korunur)'], k['id'], path)
+                    return get(pid, path)
+                try:
+                    verdict = _extra_checks(p, k, folder, verdict, test_state, test, res['provider'], rev['provider'], ai, path)
+                except router.BudgetStop as stop:
+                    _pkg(k['id'], path, status='denetim', test=test)
+                    ask(pid, 'budget', f'Ek denetimde durdu: {stop}', ['Bütçeyi artır ve devam et',
+                        'Burada durdur, olanı teslim et'], k['id'], path)
+                    return get(pid, path)
+                except RuntimeError as exc:
+                    _pkg(k['id'], path, status='takildi', findings=str(exc)[:240], test=test)
+                    ask(pid, 'qa', 'Ek bağımsız denetçi bulunamadı: ' + str(exc)[:200],
+                        ['Başka AI sağlayıcısı kurduktan sonra yeniden dene'], k['id'], path)
+                    return get(pid, path)
+                if _checkpoint(pid, path):
+                    return get(pid, path)
+                if test_state is False:
+                    verdict = ('FAIL', (verdict[1] if verdict[0] == 'FAIL' else 'Otomatik test başarısız') [:240])
         if _checkpoint(pid, path):
             return get(pid, path)
         summary = _line(res['output'], 'PARDEX_DONE') or 'Paket tamamlandı'
