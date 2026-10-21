@@ -358,8 +358,10 @@ def _reserve_folder(root, desired):
     an interrupted copy may contain edits worth recovering manually.
     """
     root = Path(root).resolve()
+    prefix = core.safe_name(desired)  # matches core.create_project's 50-character limit
     for retry in range(100):
-        name = desired if retry == 0 else f'{desired}-deneme-{retry}'
+        suffix = '' if retry == 0 else f'-deneme-{retry}'
+        name = prefix[:50 - len(suffix)] + suffix
         candidate = root / name
         try:
             candidate.mkdir(mode=0o700, exist_ok=False)
