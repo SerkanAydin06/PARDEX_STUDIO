@@ -141,6 +141,10 @@ def _save_deliverable(job, text):
     return f
 
 
+class LocalJobFailed(RuntimeError):
+    """A completed local check with an unsuccessful result."""
+
+
 def _local(job, path):
     action = job['action']
     if action == 'idea':
@@ -149,9 +153,12 @@ def _local(job, path):
         return f'Fikir hattına eklendi ({ident}). Puanları Fikirler ekranında düzenle.'
     if action == 'tests':
         if not job['project']:
-            return 'Proje seçilmedi; test çalıştırılmadı.'
+            raise LocalJobFailed('Proje seçilmedi; test çalıştırılmadı.')
         ok, report = core.validate(Path(job['project']))
-        return ('BAŞARILI' if ok else 'BAŞARISIZ / YAPILMADI') + '\n' + report[-3000:]
+        output = ('BAŞARILI' if ok else 'BAŞARISIZ / YAPILMADI') + '\n' + core.redact_log_output(report)[-3000:]
+        if not ok:
+            raise LocalJobFailed(output)
+        return output
     if action == 'radar':
         import brain
         r = brain.radar_check()
@@ -213,11 +220,14 @@ def run_job(ident, path=None, queue_path=None, caller=None):
                          note='K2 kod görevi', path=path)
             sync_code_jobs(path, queue_path)
             return store.get_job(ident, path)
-        except ValueError:
-            raise
         except Exception as exc:
+            # Queue preflight deliberately restores approved before raising. Preserve it.
+            if store.get_job(ident, path)['status'] != 'running':
+                raise
+            detail = core.redact_log_output(str(exc))
             try:
-                return store.transition(ident, 'running', 'failed', type(exc).__name__ + ': ' + str(exc)[:200], path=path)
+                return store.transition(ident, 'running', 'failed', type(exc).__name__ + ': ' + detail[:200],
+                                        output=detail if isinstance(exc, LocalJobFailed) else '', path=path)
             except ValueError:
                 raise exc
     finally:

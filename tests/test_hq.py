@@ -130,6 +130,46 @@ class WorkerTests(Base):
         bad = workers.run_job(j2['id'], self.db, self.qdb, caller=lambda d, p, path=None: (False, 'yok', ''))
         self.assertEqual(bad['status'], 'failed')
 
+    def test_local_quality_results(self):
+        for result in (True, False):
+            with self.subTest(result=result):
+                j = store.add_job('kalite', 'Proje kalite kontrolü', 'local', 'K0', 0,
+                                  project=str(self.project), action='tests', path=self.db)
+                workers.approve(j['id'], self.db, self.qdb)
+                with mock.patch.object(core, 'validate', return_value=(result, 'test raporu')):
+                    done = workers.run_job(j['id'], self.db, self.qdb)
+                self.assertEqual(done['status'], 'delivered' if result else 'failed')
+                self.assertIn('test raporu', done['output'])
+                if not result:
+                    with self.assertRaises(ValueError):
+                        workers.accept(j['id'], self.db, self.qdb)
+        j = store.add_job('kalite', 'Projesiz kalite kontrolü', 'local', 'K0', 0,
+                          action='tests', path=self.db)
+        workers.approve(j['id'], self.db, self.qdb)
+        with mock.patch.object(core, 'validate') as validate:
+            self.assertEqual(workers.run_job(j['id'], self.db, self.qdb)['status'], 'failed')
+            validate.assert_not_called()
+
+    def test_value_error_finishes_job_and_releases_worker(self):
+        j = workers.add_department_job('medya', 'Fragman senaryosu hazırla', self.db)
+        workers.approve(j['id'], self.db, self.qdb)
+        with mock.patch.object(workers, 'call_text', side_effect=ValueError('Geçersiz cevap')):
+            done = workers.run_job(j['id'], self.db, self.qdb)
+        self.assertEqual(done['status'], 'failed')
+        self.assertIn('Geçersiz cevap', done['note'])
+        next_job = workers.add_department_job('finans', 'Aylık finans raporu', self.db)
+        workers.approve(next_job['id'], self.db, self.qdb)
+        self.assertEqual(workers.run_job(next_job['id'], self.db, self.qdb)['status'], 'delivered')
+
+    def test_queue_preflight_preserves_approval(self):
+        store.update_settings({'default_project': str(self.project)}, self.db)
+        j = workers.add_department_job('oyun', 'Oyuncuya zıplama ekle', self.db)
+        workers.approve(j['id'], self.db, self.qdb)
+        with mock.patch('task_queue.preview_next', return_value={'ready': False}):
+            with self.assertRaises(ValueError):
+                workers.run_job(j['id'], self.db, self.qdb)
+        self.assertEqual(store.get_job(j['id'], self.db)['status'], 'approved')
+
     def test_pause_blocks_running(self):
         j = workers.add_department_job('finans', 'Aylık finans raporu', self.db)
         workers.approve(j['id'], self.db, self.qdb)
