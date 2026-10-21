@@ -234,7 +234,8 @@
           ${k.findings ? `<div class="small">Kontrol: ${esc(k.findings)}</div>` : ''}${k.summary ? `<div class="small">Yapılan: ${esc(k.summary)}</div>` : ''}</div>`).join('')}</div>
         ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<pre class="report">${esc(p.report)}</pre>` : ''}
         <div class="row">
-          ${(p.stage === 'uretim' || p.stage === 'durdu') && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
+          ${p.stage === 'uretim' && p.packages.length === 0 && !running ? '<button class="btn btn-teal" id="p-retry-plan" type="button">İş planını yeniden dene</button>' : ''}
+          ${(p.stage === 'uretim' || p.stage === 'durdu') && p.packages.length > 0 && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
           ${running ? '<span class="muted">Ekip çalışıyor… (bu sayfa kendini yeniler)</span>' : ''}
           ${p.stage === 'teslim' ? '<button class="btn btn-teal" id="p-accept" type="button">Teslimi kabul et</button>' : ''}
         </div>
@@ -250,9 +251,30 @@
       const f = $('#exist-folder');
       if (!confirm('Tarif dondurulacak, proje ayrı klasörde açılacak ve üretim başlayacak. CEO iş paylaşımı için 1 çağrı, sonra her paket için yaklaşık 2 çağrı kullanılır. Başlasın mı?')) return;
       t.disabled = true; t.textContent = 'CEO işleri paylaştırıyor…';
-      await act(() => api(`/api/product/${PID}/start`, { folder: f ? f.value.trim() : '' }), 'Üretim başladı'); startPoll(); return;
+      try {
+        const result = await act(() => api(`/api/product/${PID}/start`, { folder: f ? f.value.trim() : '' }), 'Üretim başladı');
+        if (result) startPoll();
+      } finally {
+        t.disabled = false;
+        t.textContent = 'Bunu yap';
+      }
+      return;
     }
-    if (t.id === 'p-run') { await act(() => api(`/api/product/${PID}/run`, {}), 'Üretim sürüyor'); startPoll(); return; }
+    if (t.id === 'p-retry-plan') {
+      t.disabled = true; t.textContent = 'İş planı hazırlanıyor…';
+      try {
+        const result = await act(() => api(`/api/product/${PID}/start`, {}), 'İş planı hazır; üretim başladı');
+        if (result) startPoll();
+      } finally {
+        t.disabled = false; t.textContent = 'İş planını yeniden dene';
+      }
+      return;
+    }
+    if (t.id === 'p-run') {
+      const result = await act(() => api(`/api/product/${PID}/run`, {}), 'Üretim sürüyor');
+      if (result) startPoll();
+      return;
+    }
     if (t.id === 'p-accept') return act(() => api(`/api/product/${PID}/accept`, {}), 'Proje tamamlandı');
     if (t.id === 'p-cancel') { if (confirm('Proje iptal edilsin mi?')) act(() => api(`/api/product/${PID}/cancel`, {}), 'İptal edildi'); return; }
     return onQuestion(ev);

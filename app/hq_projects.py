@@ -258,6 +258,8 @@ def chat(pid, text, path=None, ai=None):
     p = get(pid, path)
     if p['stage'] != 'planlama':
         raise ValueError('Plan sohbeti yalnızca planlama aşamasında')
+    if p['folder']:
+        raise ValueError('Proje klasörü hazırlandı; tarif değiştirilemez. "Bunu yap" ile iş planını yeniden dene.')
     text = _clean(text, 2000)
     if len(text) < 2:
         raise ValueError('Mesaj boş')
@@ -588,7 +590,9 @@ def breakdown(pid, path=None, ai=None):
               'Salt-okunur çalış, dosya değiştirme. YALNIZCA JSON: {"packages":[{"title":"en fazla 100 karakter",'
               '"detail":"ne yapılacak, hangi dosyalar, nasıl test edilir (en fazla 600 karakter)"}]}')
     res = (ai or router.call)(role, prompt, p['folder'] or _scratch(), 'ceo', path=path)
-    data = _json(res['output']) if res['ok'] else None
+    if not res['ok']:
+        raise RuntimeError('AI iş planını oluşturamadı: ' + core.redact_log_output(res.get('output', ''))[-180:])
+    data = _json(res['output'])
     items = []
     for x in (data or {}).get('packages', [])[:mx]:
         if isinstance(x, dict) and len(str(x.get('title', ''))) >= 4:
@@ -617,26 +621,75 @@ def estimate_calls(n, path=None, with_project_hooks=False):
     return n * per + reserve + (len(_hooks('teslim_oncesi', path)) if with_project_hooks else 0)
 
 
+def _restart_folder(p, path):
+    """Only reuse PARDEX's already-created folder for the exact same product.
+
+    A marker is necessary but not sufficient: the directory must be a direct
+    child of the configured products root, not a symlink and still the same
+    engine as the frozen product plan.
+    """
+    root = Path(store.settings(path)['projects_root']).expanduser().resolve()
+    raw = Path(p['folder']).expanduser()
+    if raw.is_symlink() or not raw.is_dir():
+        raise ValueError('Önceki proje klasörü bulunamadı. Dosyaları incele; mevcut klasör silinmedi.')
+    folder = raw.resolve()
+    marker = folder / '.studio' / MARKER
+    if (_inside_company(folder) or folder.parent != root or marker.is_symlink() or
+            not marker.is_file() or marker.stat().st_size > 200 or
+            marker.read_text(encoding='utf-8').strip() != p['id'] or
+            core.project_type(folder) != p['spec']['engine']):
+        raise ValueError('Klasörün bu ürüne ait olduğu doğrulanamadı; güvenlik için otomatik işlem yapılmadı.')
+    return folder
+
+
 def start(pid, path=None, ai=None, existing_folder=''):
-    """Owner said "Bunu yap": freeze the plan, create the separate product repo, break into packages."""
+    """Freeze/prepare a folder once; only enter production after valid packages exist.
+
+    A failed CEO call retains the original safe folder in planning state, so
+    "Bunu yap" retries without overwriting or deleting work.
+    """
     p = get(pid, path)
-    if p['stage'] != 'planlama':
+    legacy_retry = p['stage'] == 'uretim' and bool(p['folder']) and not p['packages']
+    if p['stage'] != 'planlama' and not legacy_retry:
         raise ValueError('Proje zaten başlatıldı')
+    if p['packages']:
+        raise ValueError('İş paketleri zaten mevcut; yeni başlangıç yapılmadı')
     missing = plan_ready(p['spec'])
     if missing:
         raise ValueError('Tarif eksik: ' + ', '.join(missing) + '. Ürün Müdürüyle biraz daha konuş.')
     engine = p['spec']['engine']
-    if engine not in CREATABLE and not existing_folder:
+    if ai is None and not router.installed():
+        raise ValueError('İş planını hazırlamak için önce Claude, Codex veya Gemini CLI kurup giriş yap. '
+                         'Proje klasörü oluşturulmadı, AI çağrısı yapılmadı.')
+    if engine not in CREATABLE and not existing_folder and not p['folder']:
         raise ValueError(f'{core.ENGINE_LABELS[engine]} projesini resmi editörde oluşturup klasörünü bağlaman gerekiyor')
-    folder = prepare_folder(p, path, existing_folder)
-    _set(pid, path, folder=str(folder), engine=engine, stage='uretim')
-    _say(pid, 'urun', f'Tarif donduruldu. Proje ayrı klasörde ve kendi git deposunda açıldı: {folder}', path)
-    out = _skipped_text(folder)
-    if out:
-        _say(pid, 'urun', 'Orijinal projen değiştirilmedi. Güvenli çalışma kopyasına alınmayanlar:\n' + out +
-             '\nBunlardan oyunun çalışması için gereken varsa söyle; gizli bilgiler (anahtar, şifre) kopyaya alınmaz.', path)
-    _plan_hooks(pid, path, ai or router.call)
-    return breakdown(pid, path, ai)
+
+    fresh = not p['folder']
+    if fresh:
+        folder = prepare_folder(p, path, existing_folder)
+        # Keep stage=planlama until breakdown has persisted at least one package.
+        _set(pid, path, folder=str(folder), engine=engine)
+        _say(pid, 'urun', f'Tarif donduruldu. Proje ayrı klasörde ve kendi git deposunda açıldı: {folder}', path)
+        out = _skipped_text(folder)
+        if out:
+            _say(pid, 'urun', 'Orijinal projen değiştirilmedi. Güvenli çalışma kopyasına alınmayanlar:\n' + out +
+                 '\nBunlardan oyunun çalışması için gereken varsa söyle; gizli bilgiler (anahtar, şifre) kopyaya alınmaz.', path)
+    else:
+        folder = _restart_folder(p, path)
+    try:
+        if fresh:  # do not bill/duplicate successful plan hooks on a retry
+            _plan_hooks(pid, path, ai or router.call)
+        planned = breakdown(pid, path, ai)
+        if not planned['packages']:
+            raise RuntimeError('AI iş paketi hazırlamadı. Üretime geçilmedi; yeniden deneyebilirsin.')
+    except Exception as exc:
+        if legacy_retry:
+            _set(pid, path, stage='planlama')
+        store.event('sistem', 'planning-retry', pid,
+                    'İş paketi planı tamamlanamadı; aynı klasör korunuyor: ' + str(exc)[:130], path)
+        raise
+    _set(pid, path, stage='uretim')
+    return get(pid, path)
 
 
 def _plan_hooks(pid, path, ai):
@@ -767,6 +820,8 @@ def _run(pid, path, ai, tester):
         raise ValueError('Önce açık soruyu cevapla')
     if store.settings(path)['paused']:
         raise ValueError('Şirket acil durdurmada')
+    if not p['packages']:
+        raise ValueError('Üretim planında iş paketi yok. "Bunu yap" ile planlamayı yeniden dene.')
     _set(pid, path, stage='uretim')
     folder = Path(p['folder'])
     if _inside_company(folder):
@@ -786,6 +841,11 @@ def _run(pid, path, ai, tester):
         p = get(pid, path)
         k = next((x for x in p['packages'] if x['status'] in ('bekliyor', 'duzeltme', 'calisiyor')), None)
         if not k:
+            if not any(x['status'] == 'tamam' for x in p['packages']):
+                _set(pid, path, stage='durdu')
+                store.event('sistem', 'empty-delivery-blocked', pid,
+                            'Hiçbir paket tamamlanmadı; teslim engellendi.', path)
+                return get(pid, path)
             return _deliver(pid, path, tester, ai)
         if p['used_calls'] + 2 > p['approved_calls']:
             ask(pid, 'budget', f"Onaylanan çağrı bütçesi doldu ({p['used_calls']}/{p['approved_calls']}). "
@@ -944,6 +1004,8 @@ def _delivery_hooks(p, folder, path, ai):
 
 def _deliver(pid, path, tester, ai=None):
     p = get(pid, path)
+    if not any(k['status'] == 'tamam' for k in p['packages']):
+        raise ValueError('Tamamlanan iş paketi yok; boş proje teslim edilemez.')
     folder = Path(p['folder'])
     extra = _delivery_hooks(p, folder, path, ai or router.call)
     p = get(pid, path)
