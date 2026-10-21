@@ -9,3 +9,8 @@ Bu düzeltme iki üretim engelini giderir.
 ## Test sınırları
 
 Bu paketin çevrimdışı regresyonları iptal, duraklatıp devam, gerçek alt süreç sonlandırma, son test hatası ve testin atlanması senaryolarını kapsar. GitHub Actions testleri Linux'ta; gerçek Windows, Godot ve giriş yapılmış Claude/Codex/Gemini CLI entegrasyonu ayrıca doğrulanmalıdır.
+## İptal kesindir
+
+- İptal edilen proje hiçbir yoldan yeniden canlanmaz: veritabanı katmanında `iptal` aşaması başka bir aşamaya çevrilemez.
+- İptal, projenin açık sorularını kapatır; Ofis ekranında görünmezler ve cevaplanamazlar. İptal edilmiş projeye yeni soru oluşturulmaz.
+- "Bunu yap" sırasında CEO iş planı ve plan sonrası departman çağrıları da iptal edilebilir: çalışan AI CLI bir saniye içinde durdurulur ve proje üretime geçmez.
