@@ -195,6 +195,8 @@ def validate(ops, path=None):
             if role not in hq_router.ROLES:
                 raise ValueError(f'{i}. işlem: bilinmeyen rol')
             prov = op.get('provider', '') or ''
+            if role == 'research' and prov == 'Copilot':
+                raise ValueError(f'{i}. işlem: Copilot Ar-Ge web araştırmasına atanamaz')
             if prov not in ('', 'Claude', 'Codex', 'Gemini', 'Copilot'):
                 raise ValueError(f'{i}. işlem: sağlayıcı Claude/Codex/Gemini/Copilot olmalı')
             model, effort = str(op.get('model', '') or ''), str(op.get('effort', '') or '')

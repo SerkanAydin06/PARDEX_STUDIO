@@ -80,6 +80,18 @@ class CopilotTests(unittest.TestCase):
         self.assertEqual(router.choose('review', path=self.db, have={'Copilot': 'copilot'})[0], 'Copilot')
         self.assertEqual(router.choose('review', path=self.db, have={'Copilot': 'copilot'})[1], 'claude-sonnet-5.5')
 
+    def test_web_research_never_accepts_copilot_override(self):
+        with self.assertRaisesRegex(ValueError, 'Ar-Ge web araştırması'):
+            store.update_settings({'routing': {'research': {
+                'provider': 'Copilot', 'model': '', 'effort': ''}}}, self.db)
+        with self.assertRaisesRegex(ValueError, 'Ar-Ge web araştırmasına'):
+            hq_org.validate([{'op': 'set_routing', 'role': 'research', 'provider': 'Copilot',
+                              'model': '', 'effort': ''}], path=self.db)
+        store.update_settings({'routing': {'research': {'provider': 'Claude',
+                                                       'model': 'sonnet', 'effort': ''}}}, self.db)
+        self.assertEqual(router.choose('research', path=self.db, have={'Claude': 'claude'})[0],
+                         'Claude')
+
     def test_board_can_approve_copilot_routing(self):
         ops = [{'op': 'set_routing', 'role': 'review', 'provider': 'Copilot',
                 'model': '', 'effort': ''}]

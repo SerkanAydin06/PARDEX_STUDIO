@@ -69,6 +69,8 @@ def choose(role, avoid=(), path=None, have=None):
     have = installed() if have is None else have
     s = store.settings(path)
     override = (s.get('routing') or {}).get(role)
+    if role == 'research' and override and override.get('provider') == 'Copilot':
+        raise RuntimeError('Copilot CLI web araştırması yapamaz; Claude veya Gemini seç')
     if override and override['provider'] in have and override['provider'] not in avoid:
         return override['provider'], override['model'], override['effort'], 'Patronun yönlendirme ayarı'
     cands = [c for c in ROLES[role] if c[0] in have and c[0] not in avoid]

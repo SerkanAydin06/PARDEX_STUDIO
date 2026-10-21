@@ -188,6 +188,8 @@ def update_settings(changes, path=None):
             if not re.fullmatch(r'[a-z_]{2,20}', str(role)) or not isinstance(v, dict):
                 raise ValueError('Yönlendirme rolü geçersiz')
             prov = v.get('provider', '')
+            if role == 'research' and prov == 'Copilot':
+                raise ValueError('Ar-Ge web araştırması için Claude veya Gemini seç')
             if prov not in ('', 'Claude', 'Codex', 'Gemini', 'Copilot'):
                 raise ValueError('Sağlayıcı Claude/Codex/Gemini/Copilot olmalı')
             model, effort = str(v.get('model', '')), str(v.get('effort', ''))
