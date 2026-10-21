@@ -99,10 +99,10 @@ def _recent_verification(key):
     v = _verified().get(key)
     if not v:
         return None
-    # Old records without an expiry are evidence of a past attempt, not a current login.
-    if time.time() - v.get('checked_at', 0) > VERIFY_MAX_AGE:
-        return 'unknown', 'Eski giriş testi; yeniden doğrula'
-    return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('unknown', 'Son test başarısız; yeniden giriş yap veya test et')
+    # An old successful test is historical evidence, not a logout event.
+    if v.get('ok') and time.time() - v.get('checked_at', 0) > VERIFY_MAX_AGE:
+        return 'cached', 'Son bağlantı testi başarılı; güncel oturum kontrol edilmedi. Yeniden giriş zorunlu değil.'
+    return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('unknown', 'Bağlantı doğrulanamadı; test ayrıntısını kontrol et')
 
 
 def _gemini_login(_exe, home=None):
@@ -158,17 +158,17 @@ def status(force=False):
         else:
             row['version'] = _version(_run([exe, '--version'])[1])
             state, detail = LOGIN_CHECK[key](exe)
-            row.update(login=state, detail=detail, ok=state == 'yes')
+            row.update(login=state, detail=detail, ok=state in ('yes', 'cached'))
             testable = key in VERIFY
-            row['actions'] = (['update'] if state == 'yes' else
+            row['actions'] = (['verify', 'login', 'update'] if state == 'cached' else ['update'] if state == 'yes' else
                               ['verify', 'login', 'update'] if state == 'unknown' else
                               ['login', 'verify', 'update'] if testable else ['login', 'update'])
-            logged += state == 'yes'
+            logged += state in ('yes', 'cached')
         if key in JOBS and JOBS[key]['state'] == 'running':
             row['actions'] = []
             row['detail'] = 'Kuruluyor…'
         items.append(row)
-    usable = sum(1 for i in items if i['key'] in CLIS and i['login'] == 'yes')  # only confirmed logins count
+    usable = sum(1 for i in items if i['key'] in CLIS and i['login'] in ('yes', 'cached'))  # only confirmed logins count
     ready = items[1]['ok'] and items[2]['ok'] and usable >= 2
     data = {'items': items, 'ready': ready, 'logged_in': logged, 'usable_ai': usable,
             'next': _next_step(items, usable), 'windows': os.name == 'nt', 'jobs': jobs()}
@@ -301,17 +301,21 @@ def _verify(key, path=None):
     if not exe:
         raise ValueError(f"{CLIS[key]['name']} kurulu değil; önce kur")
     worker_guard.guard_native_agent()
-    allowed, reason = store.budget_check('ceo', 1, path)
+    allowed, reason = store.budget_check('kalite', 1, path)
     if not allowed:
         raise ValueError(reason)
     provider = {'gemini': 'Gemini', 'copilot': 'Copilot'}[key]
     # Reserve before dispatch, including failed attempts; no automatic retries.
     core.record_usage(provider)
-    store.record('ceo', 'ai_call', 1, provider, note='Kurulum giriş testi', path=path)
+    store.record('kalite', 'ai_call', 1, provider, note='Kurulum giriş testi', path=path)
     code, out = _run(VERIFY[key](exe), 120)
     ok = code == 0 and out.strip() == 'OK'
     data = _verified()
-    data['antigravity' if key == 'gemini' else key] = {'ok': ok, 'at': core.now(), 'checked_at': time.time()}
+    auth_missing = bool(re.search(r"not logged in|not signed in|authentication required|login required|run.*(?:/login|copilot login)|set an auth method", out, re.I))
+    record_key = 'antigravity' if key == 'gemini' else key
+    previous = data.get(record_key, {})
+    if ok or auth_missing or not previous.get('ok'):
+        data[record_key] = {'ok': ok, 'at': core.now(), 'checked_at': time.time()}
     core.save_json(core.HOME / 'hq' / 'setup_verified.json', data)
     _CACHE['data'] = None
     if ok:
