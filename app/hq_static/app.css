@@ -167,3 +167,12 @@ input[type=range]{accent-color:var(--teal)}
 .check{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px;margin-top:12px}
 .check input{width:auto;min-height:0}
 #gmy-form textarea{flex:1 1 300px}
+
+/* Owner entry: advanced navigation stays available on demand. */
+.advanced-tab{display:none}
+.tabs.expanded .advanced-tab{display:inline-flex}
+.owner-start{margin:20px 0}
+.owner-start h1{font:28px var(--display);margin:0 0 8px}
+.owner-start p{margin:8px 0 16px}
+.office-details{margin:24px 0}
+.office-details summary{cursor:pointer;font-weight:600;padding:12px 0}
