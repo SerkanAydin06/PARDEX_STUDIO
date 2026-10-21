@@ -149,6 +149,45 @@ class ProjectLineTests(Base):
         self.assertIn('ATLANDI', excerpt)
         self.assertLessEqual(len(excerpt), 4000)
 
+    def test_review_retry_preserves_code_and_only_spends_review_call(self):
+        ai = FakeAI()
+        pid = self.planned(ai)
+        hp.start(pid, self.db, ai=ai)
+        def unavailable(role, *args, **kw):
+            result = ai(role, *args, **kw)
+            if role == 'review':
+                result['output'] = 'PARDEX_QA_UNAVAILABLE=HUD sahnesi eksik'
+            return result
+        p = hp.run_production(pid, self.db, ai=unavailable, tester=lambda f: (True, 'OK'))
+        k = p['packages'][0]
+        before_calls = p['used_calls']
+        before_writes = sum(c[0] in ('implement', 'fix') for c in ai.calls)
+        q = hp.open_questions(self.db)[0]
+        hp.answer(q['id'], q['options'][0], self.db)
+        self.assertEqual(hp.get(pid, self.db)['packages'][0]['status'], 'denetim')
+        p = hp.run_production(pid, self.db, ai=unavailable, tester=lambda f: (True, 'OK'))
+        self.assertEqual(p['used_calls'], before_calls + 1)
+        self.assertEqual(sum(c[0] in ('implement', 'fix') for c in ai.calls), before_writes)
+        self.assertEqual(p['packages'][0]['attempts'], k['attempts'])
+        self.assertEqual(p['packages'][0]['provider'], k['provider'])
+
+    def test_godot_standalone_tests_are_executed_and_errors_are_not_passed(self):
+        import subprocess
+        (self.root / 'tests').mkdir()
+        (self.root / 'tests/test_board.gd').write_text('extends SceneTree\nfunc _initialize():\n    quit()\n')
+        (self.root / 'tests/test_framework.gd').write_text('extends GutTest\n')
+        runs = []
+        def run(args, *a, **kw):
+            runs.append(args)
+            return subprocess.CompletedProcess(args, 0, 'SCRIPT ERROR: Assertion failed' if '--script' in args else 'Import complete')
+        with mock.patch.object(core, 'find_godot', return_value='godot'), mock.patch.object(core, 'run', side_effect=run):
+            ok, report = core.validate(self.root, 'godot')
+        self.assertFalse(ok)
+        self.assertEqual(len(runs), 2)
+        self.assertIn('res://tests/test_board.gd', runs[-1])
+        self.assertIn('özel test çalıştırıcısı gerekli', report)
+        self.assertIn('Çalıştırılan bağımsız birim testi: 1', report)
+
     def test_review_envelopes_and_duplicate_verdicts(self):
         good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
         self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')

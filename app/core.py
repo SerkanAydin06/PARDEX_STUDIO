@@ -368,7 +368,36 @@ def validate(project,engine=None):
         godot=find_godot()
         if not godot: return False,'Godot kurulu/bulunur degil. Test yapilmadi.'
         r=run([godot,'--headless','--path',str(project),'--editor','--quit'],project,timeout=120)
-        return r.returncode==0,'Godot import: '+('OK' if r.returncode==0 else 'HATA')+'\n'+r.stdout[-3200:]
+        def passed(result):
+            return result.returncode == 0 and not re.search(r'(SCRIPT ERROR|^ERROR:|Assertion failed)', result.stdout or '', re.M | re.I)
+        good = passed(r)
+        reports = ['Godot import: ' + ('OK' if good else 'HATA') + '\n' + (r.stdout or '')[-1600:]]
+        if not good:
+            return False, '\n'.join(reports)
+        ran = 0
+        tests_root = project / 'tests'
+        candidates = sorted(tests_root.rglob('test_*.gd')) if tests_root.is_dir() and not tests_root.is_symlink() else []
+        for script in candidates[:12]:
+            if script.is_symlink() or not script.resolve().is_relative_to(project.resolve()):
+                continue
+            source = script.read_text(encoding='utf-8-sig', errors='replace')
+            # Execute only explicit standalone Godot test entry points. GUT and
+            # other framework scripts require their own runner; never claim they ran.
+            if not re.search(r'^extends\s+SceneTree\s*(?:#.*)?$', source, re.M):
+                reports.append('Birim testi YAPILMADI (özel test çalıştırıcısı gerekli): ' + script.relative_to(project).as_posix())
+                continue
+            rel = script.relative_to(project).as_posix()
+            result = run([godot, '--headless', '--path', str(project), '--script', 'res://' + rel], project, timeout=60)
+            ok = passed(result)
+            good = good and ok
+            ran += 1
+            reports.append('Birim testi ' + rel + ': ' + ('OK' if ok else 'HATA') + '\n' + (result.stdout or '')[-1600:])
+        if len(candidates) > 12:
+            reports.append('Birim testlerinin kalanları YAPILMADI (12 dosya sınırı).')
+        if not ran:
+            reports.append('Bağımsız çalıştırılabilir SceneTree birim testi bulunamadı; birim testleri doğrulanmadı.')
+        reports.append('Çalıştırılan bağımsız birim testi: ' + str(ran))
+        return good, '\n'.join(reports)
     if engine=='flutter':
         exe=which('flutter')
         if not exe: return False,'Flutter SDK bulunamadi.'

@@ -9,7 +9,7 @@
   const DSTATE = { calisiyor: 'Çalışıyor', onay: 'Onay bekliyor', bosta: 'Boşta', durdu: 'Durduruldu' };
   let META = null, DASH = null, JOBS = [], FILTER = 'all', VIEW = 'office', poll = null, PID = '';
   const PSTAGE = { planlama: 'Planlama', uretim: 'Üretimde', soru: 'Karar bekliyor', teslim: 'Teslim edildi', tamamlandi: 'Tamamlandı', durdu: 'Durdu', iptal: 'İptal' };
-  const KSTATE = { bekliyor: 'Sırada', calisiyor: 'Çalışıyor', duzeltme: 'Düzeltmede', kayit: 'Kayıt bekliyor', tamam: 'Kontrolden geçti', takildi: 'Takıldı', atlandi: 'Atlandı' };
+  const KSTATE = { denetim: 'Denetim bekliyor', bekliyor: 'Sırada', calisiyor: 'Çalışıyor', duzeltme: 'Düzeltmede', kayit: 'Kayıt bekliyor', tamam: 'Kontrolden geçti', takildi: 'Takıldı', atlandi: 'Atlandı' };
 
   async function api(path, body) {
     const opt = { headers: { 'X-PARDEX-Token': TOKEN } };
@@ -237,7 +237,7 @@
         ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<pre class="report">${esc(p.report)}</pre>` : ''}
         <div class="row">
           ${p.stage === 'uretim' && p.packages.length === 0 && !running ? '<button class="btn btn-teal" id="p-retry-plan" type="button">İş planını yeniden dene</button>' : ''}
-          ${(p.stage === 'uretim' || p.stage === 'durdu') && p.packages.some((k) => ['bekliyor', 'duzeltme', 'calisiyor', 'kayit'].includes(k.status)) && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
+          ${(p.stage === 'uretim' || p.stage === 'durdu') && p.packages.some((k) => ['bekliyor', 'duzeltme', 'calisiyor', 'kayit', 'denetim'].includes(k.status)) && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
           ${running ? '<span class="muted">Ekip çalışıyor… (bu sayfa kendini yeniler)</span>' : ''}
           ${p.stage === 'teslim' ? '<button class="btn btn-teal" id="p-accept" type="button">Teslimi kabul et</button>' : ''}
         </div>
