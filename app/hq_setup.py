@@ -38,6 +38,8 @@ BASE_TOOLS = {
             'why': 'Her ürün kendi Git deposunda tutulur'},
     'node': {'name': 'Node.js', 'winget': 'OpenJS.NodeJS.LTS', 'url': 'https://nodejs.org/en/download',
              'why': 'Üç AI programı Node.js ile kurulur ve çalışır'},
+    'gh': {'name': 'GitHub CLI', 'winget': 'GitHub.cli', 'url': 'https://cli.github.com/',
+           'why': 'İsteğe bağlı: Pardex güncellemeleri ve çekirdek PR işlemleri'},
 }
 JOBS = {}
 _LOCK = threading.Lock()
@@ -250,6 +252,10 @@ def jobs():
 
 
 def login_command(key):
+    if key == 'gh':
+        if not core.which('gh'):
+            raise ValueError('Önce GitHub CLI kurulmalı.')
+        return ['gh', 'auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web']
     if key not in CLIS:
         raise ValueError('Bilinmeyen AI programı')
     if not core.which(key):
@@ -265,8 +271,8 @@ def login(key, opener=None):
     data = _verified()
     if data.pop('antigravity' if key == 'gemini' else key, None) is not None:  # a new login makes an old "Test et" result stale
         core.save_json(core.HOME / 'hq' / 'setup_verified.json', data)
-    title = f"PARDEX - {CLIS[key]['name']} girisi"
-    hint = {'copilot': 'Tarayıcıda GitHub hesabınla (Copilot Pro) giriş yap, sonra bu pencereyi kapat ve "Test et"e bas.',
+    title = f"PARDEX - {(BASE_TOOLS if key == 'gh' else CLIS)[key]['name']} girisi"
+    hint = {'gh': 'Tarayıcıda GitHub hesabınla giriş yap. Copilot girişi bu yetkinin yerine geçmez.', 'copilot': 'Tarayıcıda GitHub hesabınla (Copilot Pro) giriş yap, sonra bu pencereyi kapat ve "Test et"e bas.',
             'claude': 'Tarayıcıda Claude hesabınla giriş yap, sonra bu pencereyi kapat.',
             'codex': 'Tarayıcıda ChatGPT hesabınla giriş yap, sonra bu pencereyi kapat.',
             'gemini': 'Antigravity ilk açılışını tamamla, Google hesabınla giriş yap; /quit ile çıkıp Test et’e bas.'}[key]

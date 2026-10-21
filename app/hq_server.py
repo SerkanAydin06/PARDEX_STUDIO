@@ -5,6 +5,7 @@ and a localhost Host/Origin, so other websites cannot drive the panel (CSRF / DN
 Usage:  python app/hq_server.py [--port 8765] [--no-browser]
 """
 import argparse
+import os
 import json
 import re
 import secrets
@@ -15,6 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import core
+import hq_update as updater
 import hq_board as board  # noqa: E402
 import hq_ceo  # noqa: E402
 import hq_setup as setup  # noqa: E402
@@ -42,6 +45,18 @@ class Panel:
         self.prod_state = {'running': '', 'error': ''}
         self.core_state = {'running': '', 'error': ''}
         self.lock = threading.Lock()
+        self.mutation_lock = threading.RLock()
+        self.updater = updater.Controller(core.BASE, core.HOME)
+        self.restart = None
+        self.port = 8765
+
+    def update_async(self, candidate=None):
+        import task_queue
+        return self.updater.begin(
+            busy=lambda: any(x['running'] for x in (self.run_state, self.prod_state, self.core_state))
+                or any(x.get('state') == 'running' for x in setup.JOBS.values()),
+            shutdown=self.restart, port=self.port,
+            databases=[self.db or store.DATABASE, self.queue_db or task_queue.DATABASE], candidate=candidate)
 
     def core_async(self, rid, step):
         with self.lock:
@@ -68,7 +83,8 @@ class Panel:
     def board_view(self):
         return {'chat': board.chat_log(path=self.db), 'proposals': board.proposals(path=self.db),
                 'health': board.health(self.db), 'core': board.core_list(self.db),
-                'core_requirements': board.core_requirements(), 'core_state': dict(self.core_state)}
+                'core_requirements': board.core_requirements(), 'core_state': dict(self.core_state),
+                'update': self.updater.view()}
 
     def produce_async(self, pid):
         with self.lock:
@@ -246,6 +262,18 @@ def make_handler(panel):
                 return self._err(500, type(exc).__name__ + ': ' + str(exc)[:200])
 
         def _route(self, p, b):
+            # Emergency stop must never wait behind a synchronous AI request.
+            if p == '/api/update/cancel':
+                panel.updater.cancel_wait()
+                return {'cancelled': True}
+            if p == '/api/pause' or re.fullmatch(r'/api/product/P-[0-9a-f]{9}/cancel', p):
+                return self._route_impl(p, b)
+            with panel.mutation_lock:
+                if panel.updater.busy():
+                    raise ValueError('Güncelleme bekleniyor/sürüyor; yeni işlem başlatılamaz.')
+                return self._route_impl(p, b)
+
+        def _route_impl(self, p, b):
             db, qdb = panel.db, panel.queue_db
             if p == '/api/goal':
                 project = store.settings(db)['default_project']
@@ -290,7 +318,7 @@ def make_handler(panel):
                 if resume:
                     panel.produce_async(pid)
                 return {'product': pid, 'resumed': resume}
-            m = re.fullmatch(r'/api/setup/(install|login|verify)/(git|node|claude|codex|gemini|copilot)', p)
+            m = re.fullmatch(r'/api/setup/(install|login|verify)/(git|node|gh|claude|codex|gemini|copilot)', p)
             if m:
                 if m.group(1) == 'verify':
                     return setup.verify(m.group(2), path=db)
@@ -308,6 +336,15 @@ def make_handler(panel):
                 return {'version': vid}
             if p == '/api/org/rollback':
                 return org.rollback(_int(b, 'version', 0), db)
+            if p == '/api/update':
+                panel.update_async()
+                return {'started': True}
+            if p == '/api/update/publish':
+                request = board.core_get(str(b.get('id', '')), db)
+                if not request['ready']:
+                    raise ValueError('Önce adayın test ve bağımsız incelemeleri tamamlanmalı.')
+                panel.update_async(request['candidate'])
+                return {'started': True}
             if p == '/api/core':
                 return board.core_create(str(b.get('goal', '')), db)
             if p == '/api/core/rollback':
@@ -354,7 +391,18 @@ def make_handler(panel):
 def serve(port=8765, open_browser=True, panel=None):
     panel = panel or Panel()
     httpd = ThreadingHTTPServer(('127.0.0.1', port), make_handler(panel))
+    panel.restart = httpd.shutdown
+    panel.port = httpd.server_address[1]
     url = f'http://127.0.0.1:{httpd.server_address[1]}/'
+    health = os.environ.pop('PARDEX_UPDATE_HEALTH', '')
+    nonce = os.environ.pop('PARDEX_UPDATE_NONCE', '')
+    if health and nonce:
+        # Opening the real schema and static assets is part of startup health, before serving.
+        store.dashboard(panel.db)
+        for asset in ('index.html', 'app.js', 'app.css'):
+            (STATIC / asset).read_bytes()
+        receipt = Path(health)
+        receipt.write_text(json.dumps({'nonce': nonce, 'pid': os.getpid()}), encoding='utf-8')
     print('PARDEX Şirket Merkezi açık: ' + url)
     print('Kapatmak için bu pencereyi kapat veya Ctrl+C.')
     if open_browser:

@@ -33,7 +33,10 @@ def create_candidate(description,home=None):
  for name in ('README.md','KURULUM_VE_KULLANIM.md','01_ULTRA_PRO_STUDIO_AC.cmd','02_AI_CLI_KUR.cmd'):
   origin=core.BASE/name
   if origin.exists():shutil.copy2(origin,dest/name)
- manifest={'id':tag,'date':core.now(),'goal':description.strip(),'state':'prepared',
+ try:
+  source_revision=core.run(['git','rev-parse','HEAD'],core.BASE,timeout=10).stdout.strip()
+ except (OSError,RuntimeError):source_revision=''
+ manifest={'source_revision':source_revision,'id':tag,'date':core.now(),'goal':description.strip(),'state':'prepared',
            'ai_result':None,'tests':None,'reviews':{},'source_path':str(core.BASE)}
  core.save_json(dest/'CANDIDATE.json',manifest)
  return dest
@@ -111,6 +114,7 @@ def regression_gate(candidate,timeout=110,*,owner_confirms=False):
    _store(cand,m);return m['tests']
  r=run_isolated_regression(cand,timeout=timeout,owner_confirms=owner_confirms)
  passed=r.returncode==0
+ m['reviews']={}
  m['tests']={'ok':passed,'exit':r.returncode,'output':brain.sanitize(r.stdout)[-1200:], 'changed':len(diffs),
              'hashes':{d['path']:hashlib.sha256((cand/d['path']).read_bytes()).hexdigest() for d in diffs} if passed else {}}
  m['state']='tested' if passed else 'rejected';_store(cand,m)

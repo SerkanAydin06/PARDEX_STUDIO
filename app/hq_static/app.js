@@ -16,6 +16,7 @@
     if (body !== undefined) { opt.method = 'POST'; opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
     const r = await fetch(path, opt);
     const data = await r.json().catch(() => ({ ok: false, error: 'Yanıt okunamadı' }));
+    if (r.status === 403 && String(data.error || '').includes('Oturum anahtarı')) location.reload();
     if (!r.ok || data.ok === false) throw new Error(data.error || ('Hata ' + r.status));
     return body !== undefined ? data.data : data;
   }
@@ -330,10 +331,17 @@
     const rq = b.core_requirements;
     $('#core-req').innerHTML = [['codex', 'Codex CLI'], ['claude', 'Claude Code'], ['gemini', 'Antigravity CLI (Gemini)'], ['docker', 'Docker'], ['test_image', 'Test imajı (PARDEX_TEST_IMAGE)']]
       .map(([k, l]) => `<span class="chip ${rq[k] ? 'calisiyor' : 'onay'}">${rq[k] ? '✓' : '✗'} ${l}</span>`).join('');
+    const u = b.update || {};
+    $('#update-status').textContent = u.message || '';
+    $('#update-pardex').disabled = !!u.running;
+    $('#update-cancel').hidden = !u.running || u.phase !== 'waiting';
+    $('#update-gh-install').hidden = !!u.gh;
+    $('#update-gh-login').hidden = !u.gh;
+    if (u.running) startPoll();
     const cs = b.core_state.running;
     $('#core-list').innerHTML = b.core.map((c) => `<div class="pkg"><div class="pkg-head"><b>${esc(c.goal.slice(0, 90))}</b><span class="chip">${esc(CORESTATE[c.state] || c.state)}</span></div>
       ${c.note ? `<div class="small">${esc(c.note)}</div>` : ''}
-      <div class="job-actions">${[['kod', 'Kodu yazdır'], ['test', 'Test et'], ['incele', 'İki AI denetimi'], ['kur', 'Kur']].map(([st, l]) => `<button class="btn ${st === 'kur' ? 'btn-teal' : 'btn-line'}" type="button" data-core="${c.id}" data-step="${st}"${cs || (st === 'kur' && !c.ready) ? ' disabled' : ''}>${l}</button>`).join('')}</div></div>`).join('') +
+      <div class="job-actions">${[['kod', 'Kodu yazdır'], ['test', 'Test et'], ['incele', 'İki AI denetimi'], ['kur', 'Yerel kur'], ['github', 'GitHub’a birleştir ve yeniden başlat']].map(([st, l]) => `<button class="btn ${st === 'github' ? 'btn-teal' : 'btn-line'}" type="button" data-core="${c.id}" data-step="${st}"${cs || u.running || (['kur', 'github'].includes(st) && !c.ready) ? ' disabled' : ''}>${l}</button>`).join('')}</div></div>`).join('') +
       (cs ? '<div class="small muted">Çekirdek adımı çalışıyor…</div>' : '') + (b.core_state.error ? `<div class="small">Son hata: ${esc(b.core_state.error)}</div>` : '');
     if (cs) startPoll();
   }
@@ -473,6 +481,16 @@
   });
   $('#view-board').addEventListener('click', async (e) => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'update-pardex') { await act(() => api('/api/update', {}), 'Güncelleme sıraya alındı'); startPoll(); return; }
+    if (b.id === 'update-cancel') return act(() => api('/api/update/cancel', {}), 'Bekleme iptal ediliyor');
+    if (b.id === 'update-gh-install' || b.id === 'update-gh-login') {
+      const action = b.id.endsWith('install') ? 'install' : 'login';
+      const r = await act(() => api(`/api/setup/${action}/gh`, {}), null);
+      if (!r) return;
+      toast(r.message || 'Başladı');
+      if (r.url) window.open(r.url, '_blank', 'noopener');
+      return;
+    }
     if (b.dataset.coreprop) {
       if (!confirm('Çekirdek değişiklik talebi oluşturulsun mu? Kod, şirket yazılımının bir kopyasında yazılır; sen kurmadıkça hiçbir şey değişmez.')) return;
       await act(() => api('/api/core', { goal: b.dataset.coreprop }), 'Çekirdek talebi oluşturuldu');
@@ -491,6 +509,10 @@
     if (b.id === 'new-dept') return openDept('');
     if (b.dataset.core) {
       const step = b.dataset.step;
+      if (step === 'github') {
+        await act(() => api('/api/update/publish', { id: b.dataset.core }), 'GitHub yayınlama ve güncelleme sıraya alındı');
+        startPoll(); return;
+      }
       const msg = { kod: 'Codex, şirket yazılımının kopyasında kodu yazacak (1 çağrı).', test: 'Kopya, izole Docker testinden geçirilecek.', incele: 'Claude ve Gemini değişikliği bağımsız denetleyecek (2 çağrı).', kur: 'Onaylı değişiklik şirket yazılımına kurulacak; yedek alınır, geri alınabilir. Sonra paneli yeniden aç.' }[step];
       if (!confirm(msg + ' Devam?')) return;
       await act(() => api(`/api/core/${b.dataset.core}/${step}`, {}), 'Başladı'); startPoll(); return;

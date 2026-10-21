@@ -232,8 +232,17 @@
         <div id="versions" class="stack-sm"></div>
       </div>
       <div class="card side">
+        <h2>Pardex güncellemesi</h2>
+        <p class="muted small">Çalışan işler bitince testleri geçen GitHub sürümü yedeklenerek kurulur. Pardex yeniden açılır; açılış başarısızsa eski sürüme dönülür.</p>
+        <div id="update-status" class="small" role="status"></div>
+        <div class="job-actions">
+          <button id="update-pardex" class="btn btn-teal" type="button">Güncelle ve yeniden başlat</button>
+          <button id="update-cancel" class="btn btn-line" type="button" hidden>Güncelleme beklemesini iptal et</button>
+          <button id="update-gh-install" class="btn btn-line" type="button">GitHub CLI kur</button>
+          <button id="update-gh-login" class="btn btn-line" type="button">GitHub’a giriş yap</button>
+        </div>
         <h2>Çekirdek yazılım değişikliği</h2>
-        <p class="muted small">Ayarla yapılamayan değişiklikler (yeni ekran, yeni özellik) şirketin kopyasında yazılır, test edilir, iki farklı AI denetler; ancak sen "Kur" dersen uygulanır ve geri alınabilir.</p>
+        <p class="muted small">Ayarla yapılamayan değişiklikler (yeni ekran, yeni özellik) şirketin kopyasında yazılır, test edilir, iki farklı AI denetler; hazır aday için "GitHub’a birleştir ve yeniden başlat" tüm yayınlama/güncelleme adımlarını yürütür. "Kur" yalnızca yerel kurulum yapar.</p>
         <div id="core-req" class="srcs"></div>
         <form id="core-form" class="stack-sm"><label for="core-goal">Ne değişsin?</label><textarea id="core-goal" rows="2"></textarea>
           <button class="btn btn-line" type="submit">Talep oluştur</button></form>
