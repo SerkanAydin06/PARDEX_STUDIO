@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 
 import core
+import hq_store as store
+import worker_guard
 
 NODE_MIN = 20
 CLIS = {
@@ -38,6 +40,8 @@ BASE_TOOLS = {
 }
 JOBS = {}
 _LOCK = threading.Lock()
+_VERIFY_LOCK = threading.Lock()
+VERIFY_MAX_AGE = 15 * 60
 _CACHE = {'at': 0.0, 'data': None}
 
 
@@ -90,16 +94,26 @@ def _verified():
     return core.load_json(core.HOME / 'hq' / 'setup_verified.json', {})
 
 
+def _recent_verification(key):
+    v = _verified().get(key)
+    if not v:
+        return None
+    # Old records without an expiry are evidence of a past attempt, not a current login.
+    if time.time() - v.get('checked_at', 0) > VERIFY_MAX_AGE:
+        return 'unknown', 'Eski giriş testi; yeniden doğrula'
+    return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('unknown', 'Son test başarısız; yeniden giriş yap veya test et')
+
+
 def _gemini_login(_exe, home=None):
-    """Gemini CLI has no status command. Without a chosen auth method it cannot run at all (no), a cached
-    Google login file or a successful "Test et" means yes; a chosen method with credentials in the system
+    """Gemini CLI has no status command. Without a chosen auth method it cannot run at all (no), only a recent successful "Test et" means yes; a cached
+    Google login file is unconfirmed; a chosen method with credentials in the system
     keychain cannot be seen from here (unknown). Never a false 'yes'."""
-    v = _verified().get('gemini')
+    v = _recent_verification('gemini')
     if v:
-        return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('no', 'Son test: giriş yapılmamış')
+        return v
     base = Path(home or Path.home()) / '.gemini'
     if (base / 'oauth_creds.json').is_file():
-        return 'yes', 'Google hesabıyla giriş yapılmış'
+        return 'unknown', 'Giriş dosyası var; hesabı doğrulamak için Test et’e bas'
     try:
         conf = json.loads((base / 'settings.json').read_text(encoding='utf-8'))
         selected = ((conf.get('security') or {}).get('auth') or {}).get('selectedType') or conf.get('selectedAuthType')
@@ -113,9 +127,9 @@ def _gemini_login(_exe, home=None):
 def _copilot_login(_exe):
     """Copilot keeps its login in the system credential store and has no status command: only a
     "Test et" result is trusted (when logged out the CLI refuses before sending anything)."""
-    v = _verified().get('copilot')
+    v = _recent_verification('copilot')
     if v:
-        return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('no', 'Son test: giriş yapılmamış')
+        return v
     return 'unknown', 'Giriş durumu dışarıdan okunamıyor; giriş yaptıysan "Test et"e bas'
 
 
@@ -273,18 +287,34 @@ VERIFY = {'gemini': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey 
           'copilot': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.']}
 
 
-def verify(key):
-    """Owner-triggered login check for a CLI without a status command. Not logged in: fails before any
-    request (0 quota). Logged in: exactly one tiny prompt."""
+def verify(key, path=None):
+    if not _VERIFY_LOCK.acquire(blocking=False):
+        raise ValueError('Başka bir giriş testi sürüyor; bitmesini bekle')
+    try:
+        return _verify(key, path)
+    finally:
+        _VERIFY_LOCK.release()
+
+
+def _verify(key, path=None):
+    """One budgeted owner-triggered prompt; reserve one attempt before dispatch."""
     if key not in VERIFY:
         raise ValueError('Bu program için test gerekmiyor; durumu otomatik okunuyor')
     exe = core.which(key)
     if not exe:
         raise ValueError(f"{CLIS[key]['name']} kurulu değil; önce kur")
+    worker_guard.guard_native_agent()
+    allowed, reason = store.budget_check('ceo', 1, path)
+    if not allowed:
+        raise ValueError(reason)
+    provider = {'gemini': 'Gemini', 'copilot': 'Copilot'}[key]
+    # Reserve before dispatch, including failed attempts; no automatic retries.
+    core.record_usage(provider)
+    store.record('ceo', 'ai_call', 1, provider, note='Kurulum giriş testi', path=path)
     code, out = _run(VERIFY[key](exe), 120)
-    ok = code == 0 and 'OK' in out.upper()
+    ok = code == 0 and out.strip() == 'OK'
     data = _verified()
-    data[key] = {'ok': ok, 'at': core.now()}
+    data[key] = {'ok': ok, 'at': core.now(), 'checked_at': time.time()}
     core.save_json(core.HOME / 'hq' / 'setup_verified.json', data)
     _CACHE['data'] = None
     if ok:

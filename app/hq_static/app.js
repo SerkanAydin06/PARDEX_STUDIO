@@ -584,7 +584,7 @@
     const b = e.target.closest('[data-setup]'); if (!b) return;
     const tool = b.dataset.tool, act = b.dataset.setup;
     if (act === 'install' && !confirm('Kurulum resmî paket kaynağından yapılacak. Devam?')) return;
-    if (act === 'verify' && !confirm('Giriş testi: giriş yoksa hiç kota harcanmaz; varsa 1 çok küçük çağrı yapılır. Devam?')) return;
+    if (act === 'verify' && !confirm('Giriş testi 1 küçük AI çağrısı deneyebilir; şirket bütçesine 1 deneme kaydedilir. Devam?')) return;
     b.disabled = true;
     try {
       const r = await api(`/api/setup/${act}/${tool}`, {});

@@ -88,7 +88,7 @@ class SetupStatusTests(unittest.TestCase):
         (self.home / '.gemini').mkdir(exist_ok=True)
         (self.home / '.gemini' / 'oauth_creds.json').write_text('{}')
         g = [i for i in self.status({'git', 'node', 'npm', 'gemini'}, out)['items'] if i['key'] == 'gemini'][0]
-        self.assertEqual(g['login'], 'yes')
+        self.assertEqual(g['login'], 'unknown')
 
     def test_status_never_runs_a_prompt(self):
         calls = []
@@ -102,6 +102,14 @@ class SetupStatusTests(unittest.TestCase):
 class SetupActionTests(unittest.TestCase):
     def setUp(self):
         setup.JOBS.clear()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for p in (mock.patch.object(core, 'HOME', root),
+                  mock.patch.object(core, 'STATE', root / 'state.json'),
+                  mock.patch.object(setup.store, 'DATABASE', root / 'hq.db')):
+            p.start()
+            self.addCleanup(p.stop)
 
     def test_install_commands_are_fixed_official_packages(self):
         w, _ = fake_env({'npm', 'winget'}, {})
@@ -159,6 +167,34 @@ class SetupActionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setup.verify('claude')
 
+    def test_verify_rejects_substrings_and_records_attempts(self):
+        with mock.patch.object(core, 'which', return_value='/fake/gemini'):
+            for output in ('TOKEN unavailable', 'NOT OK', 'OK extra', 'ok'):
+                with self.subTest(output=output), mock.patch.object(setup, '_run', return_value=(0, output)):
+                    self.assertFalse(setup.verify('gemini')['ok'])
+        self.assertEqual(setup.store.calls_used(path=setup.store.DATABASE), 4)
+        self.assertEqual(core.usage_count(), 4)
+
+    def test_verify_honors_pause_budget_and_strict_mode(self):
+        with mock.patch.object(core, 'which', return_value='/fake/gemini'), mock.patch.object(setup, '_run') as run:
+            setup.store.update_settings({'paused': True})
+            with self.assertRaises(ValueError):
+                setup.verify('gemini')
+            setup.store.update_settings({'paused': False, 'day_call_limit': 0})
+            with self.assertRaises(ValueError):
+                setup.verify('gemini')
+            setup.store.update_settings({'day_call_limit': 40})
+            with mock.patch.dict(setup.os.environ, {'PARDEX_REQUIRE_ISOLATED_AI': '1'}):
+                with self.assertRaises(RuntimeError):
+                    setup.verify('gemini')
+            run.assert_not_called()
+        self.assertEqual(core.usage_count(), 0)
+
+    def test_old_verification_does_not_confirm_login(self):
+        core.save_json(core.HOME / 'hq' / 'setup_verified.json',
+                       {'copilot': {'ok': True, 'checked_at': 0}})
+        self.assertEqual(setup._copilot_login('unused')[0], 'unknown')
+
     def test_server_routes_are_allow_listed(self):
         import re
         import hq_server
@@ -183,7 +219,7 @@ class SetupActionTests(unittest.TestCase):
             self.assertEqual((cop['login'], cop['actions'][0]), ('unknown', 'verify'))
             with fake_env({'copilot'}, {})[0], mock.patch.object(setup, '_run', return_value=(1, "Start 'copilot' and run the '/login' command")):
                 self.assertFalse(setup.verify('copilot')['ok'])
-            self.assertEqual(setup._copilot_login('copilot')[0], 'no')
+            self.assertEqual(setup._copilot_login('copilot')[0], 'unknown')
             with fake_env({'copilot'}, {})[0]:
                 setup.login('copilot')  # new login: stale "no" is forgotten (non-Windows path: no window opened)
             self.assertEqual(setup._copilot_login('copilot')[0], 'unknown')
