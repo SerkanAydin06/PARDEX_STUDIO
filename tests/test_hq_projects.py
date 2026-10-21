@@ -126,6 +126,29 @@ class ProjectLineTests(Base):
         self.assertIn('PARDEX_QA_UNAVAILABLE=', prompt)
         self.assertIsNone(hp._qa('PARDEX_QA_UNAVAILABLE=Kod farkı eksik, karar verilemiyor'))
 
+    def test_review_evidence_keeps_complete_new_files_and_spaced_paths(self):
+        board = 'extends Node\n' + '# board logic\n' * 180 + '# END_BOARD'
+        test = 'extends Node\n' + '# assertions\n' * 180 + '# END_TEST'
+        (self.root / 'Board.gd').write_text(board)
+        (self.root / 'test board.gd').write_text(test)
+        def git(folder, *args):
+            import subprocess
+            output = 'Board.gd\0test board.gd\0' if args[0] == 'ls-files' else ''
+            return subprocess.CompletedProcess(args, 0, output)
+        with mock.patch.object(hp, '_git', side_effect=git):
+            evidence = hp._diff(self.root)
+            self.assertIn(board, evidence)
+            self.assertIn(test, evidence)
+            small = hp._diff(self.root, limit=1000)
+            self.assertIn('EKSİK KANIT', small)
+            self.assertNotIn('+++ YENİ DOSYA', small)
+        report = 'START_ENGINE_LOG' + 'x' * 5000 + 'END_ENGINE_LOG'
+        excerpt = hp._evidence_excerpt(report, 4000)
+        self.assertTrue(excerpt.startswith('START_ENGINE_LOG'))
+        self.assertTrue(excerpt.endswith('END_ENGINE_LOG'))
+        self.assertIn('ATLANDI', excerpt)
+        self.assertLessEqual(len(excerpt), 4000)
+
     def test_review_envelopes_and_duplicate_verdicts(self):
         good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
         self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')
