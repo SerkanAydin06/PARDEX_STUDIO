@@ -339,51 +339,122 @@ def _write_brief(folder, spec):
     (meta / 'SPEC.json').write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
+GIT_HELP = ('Git kurulu değil. Ürünler kendi Git deposunda tutulduğu için gerekli: '
+            'https://git-scm.com/downloads/win adresinden kur, paneli yeniden aç ve "Bunu yap" de. '
+            'Hiçbir dosya kopyalanmadı, hiç çağrı harcanmadı.')
+MARKER = 'PARDEX_PRODUCT'
+
+
+def _mark(folder, pid):
+    meta = Path(folder) / '.studio'
+    meta.mkdir(parents=True, exist_ok=True)
+    (meta / MARKER).write_text(pid, encoding='utf-8')
+
+
+def _reclaim(folder, pid, root, legacy_name=False):
+    """Remove a leftover folder from an earlier FAILED start of this same product, so it can be retried.
+
+    Only inside the product root, only for a product still in planning, and only if the folder carries this
+    product's marker (or, for copies made before markers existed, the copy name that embeds the product id).
+    """
+    folder, root = Path(folder), Path(root).resolve()
+    if not folder.exists() or folder.is_symlink() or folder.resolve().parent != root:
+        return False
+    marker = folder / '.studio' / MARKER
+    ours = (marker.is_file() and marker.read_text(encoding='utf-8').strip() == pid) or legacy_name
+    if not ours:
+        return False
+    shutil.rmtree(folder)
+    return True
+
+
+def _write_skipped(folder, skipped):
+    """Tell the owner what the safe copy left out (secrets, private folders, unsupported file types)."""
+    if not skipped:
+        return ''
+    lines = []
+    if skipped.get('secret'):
+        lines.append('Gizli bilgi içerebileceği için alınmayan dosyalar: ' + ', '.join(skipped['secret'][:20]) +
+                     (f" (+{len(skipped['secret']) - 20})" if len(skipped['secret']) > 20 else ''))
+    if skipped.get('private_dirs'):
+        lines.append('Alınmayan özel/üretilmiş klasörler: ' + ', '.join(skipped['private_dirs'][:12]))
+    if skipped.get('other_types'):
+        top = sorted(skipped['other_types'].items(), key=lambda x: -x[1])[:10]
+        lines.append('Desteklenmeyen türde olduğu için alınmayan dosyalar: ' +
+                     ', '.join(f'{e} ×{n}' for e, n in top))
+    text = '\n'.join('- ' + x for x in lines)
+    meta = Path(folder) / '.studio'
+    meta.mkdir(parents=True, exist_ok=True)
+    (meta / 'KOPYA_DISARIDA.md').write_text('# Çalışma kopyasına alınmayanlar\n\n' + text + '\n', encoding='utf-8')
+    return text
+
+
 def prepare_folder(p, path=None, existing=''):
+    """Create the product's own folder + Git repo. Any failure removes only what this call created,
+    so "Bunu yap" can always be retried; the owner's original project is never touched."""
     spec = p['spec']
-    if existing:
-        # Never run an AI writer, git init/add/commit or rollback in a user's
-        # live project. Import only allowed sources into a brand-new copy.
-        from project_delivery import ASSET_EXTENSIONS, HQ_MAX_BYTES, HQ_MAX_FILES, _snapshot
-        source = Path(existing).expanduser()
-        if source.is_symlink():
-            raise ValueError('Sembolik bağlantı proje klasörü kullanılamaz')
-        source = source.resolve(strict=True)
-        if _inside_company(source) or not source.is_dir() or core.project_type(source) == 'unknown':
-            raise ValueError('Mevcut proje geçersiz veya şirket deposunun içinde')
-        root = Path(store.settings(path)['projects_root']).expanduser().resolve()
-        if _inside_company(root) or root == source or root.is_relative_to(source):
-            raise ValueError('Çalışma kopyası mevcut projenin içinde olamaz')
-        root.mkdir(parents=True, exist_ok=True)
-        folder = root / (_slug(spec.get('name') or p['name']) + '-kopya-' + p['id'][2:])
-        if folder.exists():
-            raise FileExistsError('Aynı isimde çalışma kopyası zaten var; üzerine yazılmadı')
-        folder.mkdir(mode=0o700)
-        try:  # copy errors include disk-full OSError, not just validation failures
+    if not core.which('git'):
+        raise ValueError(GIT_HELP)  # checked before anything is created or copied
+    root = Path(store.settings(path)['projects_root']).expanduser().resolve()
+    if _inside_company(root):
+        raise ValueError('Ürün klasörü şirket deposunun içinde olamaz; Ayarlar’dan değiştir')
+    created, skipped = None, {}
+    try:
+        if existing:
+            # Never run an AI writer, git init/add/commit or rollback in a user's
+            # live project. Import only allowed sources into a brand-new copy.
+            from project_delivery import ASSET_EXTENSIONS, HQ_MAX_BYTES, HQ_MAX_FILES, _snapshot
+            source = Path(existing).expanduser()
+            if source.is_symlink():
+                raise ValueError('Sembolik bağlantı proje klasörü kullanılamaz')
+            source = source.resolve(strict=True)
+            if _inside_company(source) or not source.is_dir() or core.project_type(source) == 'unknown':
+                raise ValueError('Mevcut proje geçersiz veya şirket deposunun içinde')
+            if root == source or root.is_relative_to(source):
+                raise ValueError('Çalışma kopyası mevcut projenin içinde olamaz')
+            root.mkdir(parents=True, exist_ok=True)
+            folder = root / (_slug(spec.get('name') or p['name']) + '-kopya-' + p['id'][2:])
+            if folder.exists() and not _reclaim(folder, p['id'], root, legacy_name=p['stage'] == 'planlama'):
+                raise FileExistsError('Aynı isimde çalışma kopyası zaten var; üzerine yazılmadı')
+            folder.mkdir(mode=0o700)
+            created = folder
+            _mark(folder, p['id'])
+            # copy errors include disk-full OSError, not just validation failures
             _snapshot(source, target=folder, extra_extensions=ASSET_EXTENSIONS,
-                      max_files=HQ_MAX_FILES, max_bytes=HQ_MAX_BYTES)
+                      max_files=HQ_MAX_FILES, max_bytes=HQ_MAX_BYTES, skipped=skipped)
             if core.project_type(folder) != core.project_type(source):
                 raise ValueError('Güvenli kopyada proje giriş dosyaları eksik')
             core.attach_project(folder, spec.get('summary', ''))
-        except Exception:
-            shutil.rmtree(folder, ignore_errors=True)  # only our newly-created copy
-            raise
-        store.event('sistem', 'copy-existing-project', p['id'],
-                    'Orijinal değiştirilmedi; ayrı çalışma kopyası: ' + str(folder), path)
-    else:
-        root = Path(store.settings(path)['projects_root']).expanduser().resolve()
-        if _inside_company(root):
-            raise ValueError('Ürün klasörü şirket deposunun içinde olamaz; Ayarlar’dan değiştir')
-        root.mkdir(parents=True, exist_ok=True)
-        folder = root / _slug(spec.get('name') or p['name'])
-        if folder.exists() and any(folder.iterdir()):
-            folder = root / (_slug(spec.get('name') or p['name']) + '-' + p['id'][-4:])
-        folder = core.create_project(root, folder.name, spec['engine'], spec.get('summary', ''))
-    _write_brief(folder, spec)
-    if not (folder / '.git').exists() and _git(folder, 'init') is not None:
-        _git(folder, 'config', 'user.name', 'PARDEX Studio')
-        _git(folder, 'config', 'user.email', 'studio@pardex.local')
-    _commit(folder, 'PARDEX: proje başlangıcı')
+            store.event('sistem', 'copy-existing-project', p['id'],
+                        'Orijinal değiştirilmedi; ayrı çalışma kopyası: ' + str(folder), path)
+        else:
+            root.mkdir(parents=True, exist_ok=True)
+            base = _slug(spec.get('name') or p['name'])
+            folder = root / base
+            # Leftovers are removed only when they carry THIS product's marker; any other folder is kept
+            # and a more specific free name is used instead.
+            for name in (base, base + '-' + p['id'][-4:], base + '-' + p['id'][2:]):
+                folder = root / name
+                if not (folder.exists() and any(folder.iterdir())) or _reclaim(folder, p['id'], root):
+                    break
+            else:
+                raise FileExistsError('Uygun boş proje klasörü bulunamadı; ürün klasöründe yer aç')
+            folder = core.create_project(root, folder.name, spec['engine'], spec.get('summary', ''))
+            created = folder
+            _mark(folder, p['id'])
+        _write_brief(folder, spec)
+        _write_skipped(folder, skipped)
+        if not (folder / '.git').exists():
+            init = _git(folder, 'init', '-q')
+            if init is None or init.returncode:
+                raise RuntimeError('Git deposu oluşturulamadı: ' + (init.stdout[-200:] if init else 'git yok'))
+            _git(folder, 'config', 'user.name', 'PARDEX Studio')
+            _git(folder, 'config', 'user.email', 'studio@pardex.local')
+        _commit(folder, 'PARDEX: proje başlangıcı')
+    except BaseException:
+        if created is not None:
+            shutil.rmtree(created, ignore_errors=True)  # only what this call created
+        raise
     return folder
 
 
@@ -427,6 +498,14 @@ def _git_z_paths(folder, *args, limit=4_000_000):
         raise RuntimeError('Git dosya listesi eksik, çok büyük veya hatalı')
     return [x.decode('utf-8', 'surrogateescape')
             for x in run.stdout.split(b'\0') if x]
+
+
+def _skipped_text(folder):
+    f = Path(folder) / '.studio' / 'KOPYA_DISARIDA.md'
+    try:
+        return f.read_text(encoding='utf-8').split('\n', 2)[-1].strip() if f.is_file() else ''
+    except OSError:
+        return ''
 
 
 def _commit(folder, message):
@@ -548,6 +627,10 @@ def start(pid, path=None, ai=None, existing_folder=''):
     folder = prepare_folder(p, path, existing_folder)
     _set(pid, path, folder=str(folder), engine=engine, stage='uretim')
     _say(pid, 'urun', f'Tarif donduruldu. Proje ayrı klasörde ve kendi git deposunda açıldı: {folder}', path)
+    out = _skipped_text(folder)
+    if out:
+        _say(pid, 'urun', 'Orijinal projen değiştirilmedi. Güvenli çalışma kopyasına alınmayanlar:\n' + out +
+             '\nBunlardan oyunun çalışması için gereken varsa söyle; gizli bilgiler (anahtar, şifre) kopyaya alınmaz.', path)
     _plan_hooks(pid, path, ai or router.call)
     return breakdown(pid, path, ai)
 
@@ -873,6 +956,9 @@ def _deliver(pid, path, tester, ai=None):
         lines += ['', '## Eksik kalanlar'] + [f"- {k['title']}: {k['findings'][:160]}" for k in skipped]
     if extra:
         lines += ['', '## Teslim öncesi departmanlar'] + extra
+    left_out = _skipped_text(folder)
+    if left_out:
+        lines += ['', '## Çalışma kopyasına alınmayanlar (orijinalde duruyor)', left_out]
     lines += ['', '## Senin kontrol etmen gerekenler', '- Oynanış/görünüş ve kabul ölçütleri:'] + \
              ['  - ' + a for a in p['spec'].get('acceptance', [])]
     report = '\n'.join(lines)
