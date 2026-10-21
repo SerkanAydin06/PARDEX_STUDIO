@@ -31,3 +31,5 @@ jobs:
           python-version: '3.12'
       - name: Windows update and rollback regression (no cloud AI)
         run: python -m unittest discover -s tests -p 'test_hq_update.py' -v
+      - name: Windows local administration regression (no cloud AI)
+        run: python -m unittest discover -s tests -p 'test_hq_admin.py' -v
