@@ -589,7 +589,12 @@
     try {
       const r = await api(`/api/setup/${act}/${tool}`, {});
       if (r.manual && r.url) window.open(r.url, '_blank', 'noopener');
-      toast(r.message || 'Başladı');
+      toast(r.message || 'Başladı', r.ok === false);
+      if (r.ok === false && r.detail) {
+        $('#out-title').textContent = 'Giriş testi ayrıntısı';
+        $('#out-body').textContent = r.message + '\n\nÇıkış kodu: ' + r.exit_code + '\n' + r.detail;
+        $('#out-dialog').showModal();
+      }
     } catch (err) { toast(err.message, true); }
     loadSetup(true);
   });

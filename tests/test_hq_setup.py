@@ -159,7 +159,7 @@ class SetupActionTests(unittest.TestCase):
             with w, mock.patch.object(setup, '_run', return_value=(41, 'Please set an Auth method')):
                 out = setup.verify('gemini')
             self.assertFalse(out['ok'])
-            self.assertIn('Giriş yapılmamış', out['message'])
+            self.assertIn('Giriş doğrulanamadı', out['message'])
             with w, mock.patch.object(setup, '_run', return_value=(0, 'OK')) as run:
                 self.assertTrue(setup.verify('gemini')['ok'])
             self.assertEqual(run.call_args.args[0][1], '-p')
@@ -189,6 +189,21 @@ class SetupActionTests(unittest.TestCase):
                     setup.verify('gemini')
             run.assert_not_called()
         self.assertEqual(core.usage_count(), 0)
+
+    def test_copilot_verification_uses_clean_output_and_reports_failures(self):
+        with mock.patch.object(core, 'which', return_value='/fake/copilot'):
+            with mock.patch.object(setup, '_run', return_value=(0, 'OK')) as run:
+                self.assertTrue(setup.verify('copilot')['ok'])
+                self.assertIn('--silent', run.call_args.args[0])
+                self.assertIn('--no-ask-user', run.call_args.args[0])
+            for code, text in ((1, 'Quota exceeded'), (127, 'OSError'),
+                               (0, 'OK\nTotal usage: 1 request')):
+                with self.subTest(text=text), mock.patch.object(setup, '_run', return_value=(code, text)):
+                    result = setup.verify('copilot')
+                    self.assertFalse(result['ok'])
+                    self.assertEqual(result['exit_code'], code)
+                    self.assertEqual(result['detail'], text)
+                    self.assertNotIn('hesabına bağlan', result['message'])
 
     def test_old_verification_does_not_confirm_login(self):
         core.save_json(core.HOME / 'hq' / 'setup_verified.json',

@@ -59,7 +59,7 @@ def _run(argv, timeout=20):
                            encoding='utf-8', errors='replace', timeout=timeout, env=_env(), check=False)
         return r.returncode, (r.stdout or '').strip()
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return 127, type(exc).__name__
+        return 127, core.redact_log_output(type(exc).__name__ + ': ' + str(exc))[-1500:]
 
 
 def _version(text):
@@ -281,7 +281,7 @@ def login(key, opener=None):
 
 
 VERIFY = {'gemini': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.'],
-          'copilot': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.']}
+          'copilot': lambda exe: [exe, '--silent', '--no-ask-user', '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.']}
 
 
 def verify(key, path=None):
@@ -316,6 +316,12 @@ def _verify(key, path=None):
     _CACHE['data'] = None
     if ok:
         return {'ok': True, 'message': f"{CLIS[key]['name']} girişi doğrulandı (1 küçük çağrı kullanıldı)."}
-    reason = 'Giriş yapılmamış' if re.search(r'auth|login', out, re.I) else 'Test başarısız'
-    return {'ok': False, 'message': f"{reason}: \"Giriş yap\" ile hesabınla giriş yap, sonra tekrar test et.",
-            'detail': core.redact_log_output(out)[-300:]}
+    auth_missing = bool(re.search(r"not logged in|not signed in|authentication required|login required|run.*(?:/login|copilot login)|set an auth method", out, re.I))
+    if auth_missing:
+        message = 'Giriş doğrulanamadı. Giriş yap ile hesabına bağlan, sonra tekrar test et.'
+    elif code == 0:
+        message = 'Komut tamamlandı ancak beklenen test yanıtı alınamadı. Ayrıntıyı incele; yeniden giriş gerekmeyebilir.'
+    else:
+        message = 'Test komutu başarısız. Ayrıntıyı incele; bu sonuç tek başına giriş yapılmadığı anlamına gelmez.'
+    return {'ok': False, 'message': message, 'exit_code': code,
+            'detail': core.redact_log_output(out)[-1500:] or 'CLI çıktı vermedi.'}
