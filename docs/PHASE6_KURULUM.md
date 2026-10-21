@@ -43,3 +43,6 @@ Google bireysel Gemini CLI erişimini 18 Haziran 2026'da Antigravity CLI'a taş�
 - Eski Gemini test sonucu Antigravity girişini doğrulamaz. `auto/pro/flash/flash-lite` eski CLI takma adları gönderilmez; CLI hesap varsayılanını kullanır. Açık model seçimi için `agy models` çıktısındaki geçerli model kimliği kullanılmalı.
 - Toplu izin atlama bayrağı verilmez. Headless modda onay isteyen araçlar CLI politikasıyla reddedilebilir; native CLI tam OS izolasyonu garantisi değildir. Windows ve gerçek Google hesabıyla uçtan uca üretim bu ortamda doğrulanmadı.
 Kaynaklar: https://antigravity.google/docs/getting-started/?tab=cli ve https://antigravity.google/docs/cli/headless/
+
+## Godot programı otomatik bulunamıyorsa
+Diğer bölümler → Ayarlar → Godot program dosyasının tam yolu alanına Godot `.exe` dosyasının yolunu yapıştır ve kaydet. Tırnaklı ve boşluk içeren yollar desteklenir. Dosya mevcut olmalı; ayar boş bırakılırsa eski otomatik arama kullanılır. Ayar bir Godot kurulum veya sürüm doğrulaması değildir; gerçek proje testi üretim akışında çalışır. Dosya taşınırsa yol güncellenmelidir.

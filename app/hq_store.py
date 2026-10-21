@@ -6,6 +6,7 @@ Every job starts as ``proposed`` and needs the owner's explicit approval.
 import contextlib
 import datetime as dt
 import json
+import os
 import re
 import sqlite3
 import uuid
@@ -48,6 +49,7 @@ DEFAULT_SETTINGS = {
     'weekly_call_limit': 200,
     'day_call_limit': 40,
     'projects_root': str(Path.home() / 'PardexProjeler'),
+    'godot_path': '',
     'routing': {},
     'budgets': {k: v[2] for k, v in DEPARTMENTS.items()},
     'ollama_model': '',
@@ -156,7 +158,7 @@ def settings(path=None):
 
 def update_settings(changes, path=None):
     allowed = {'paused', 'weekly_call_limit', 'day_call_limit', 'budgets', 'ollama_model', 'default_project',
-               'currency', 'projects_root', 'routing'}
+               'currency', 'projects_root', 'routing', 'godot_path'}
     if not isinstance(changes, dict) or not set(changes) <= allowed:
         raise ValueError('Bilinmeyen ayar')
     cur = settings(path)
@@ -179,6 +181,16 @@ def update_settings(changes, path=None):
         if root == core.BASE or core.BASE in root.parents:
             raise ValueError('Ürünler şirket deposunun içinde olamaz; ayrı bir klasör seç')
         cur['projects_root'] = str(root)
+    if 'godot_path' in changes:
+        raw = str(changes['godot_path'] or '').strip().strip('"')
+        if raw:
+            binary = Path(raw).expanduser()
+            if not binary.is_absolute() or not binary.is_file():
+                raise ValueError('Godot için var olan program dosyasının tam yolunu gir')
+            if not binary.name.lower().startswith('godot') or (os.name == 'nt' and binary.suffix.lower() != '.exe'):
+                raise ValueError('Godot program dosyasını seç (Godot*.exe)')
+            raw = str(binary.resolve())
+        cur['godot_path'] = raw
     if 'routing' in changes:
         r = changes['routing']
         if not isinstance(r, dict):

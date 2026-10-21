@@ -88,6 +88,11 @@ def normalize_google_args(argv, input_data=None):
     return out, input_data
 
 def find_godot():
+    import hq_store
+    configured = hq_store.settings().get('godot_path', '')
+    if configured:
+        candidate = Path(configured)
+        return str(candidate) if candidate.is_file() else None
     found = which('godot') or which('godot4')
     if found: return found
     if os.name=='nt':
