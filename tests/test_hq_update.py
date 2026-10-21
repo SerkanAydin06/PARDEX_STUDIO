@@ -129,6 +129,34 @@ class Checkout(unittest.TestCase):
 
 
 class Checks(unittest.TestCase):
+    def test_detached_real_panel_startup_and_health(self):
+        import socket
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'app').mkdir()
+            job = root / 'job'
+            job.mkdir()
+            with socket.socket() as sock:
+                sock.bind(('127.0.0.1', 0))
+                port = sock.getsockname()[1]
+            actual_app = str(Path(hq_server.__file__).resolve().parent)
+            # Thin launcher into the real panel, using isolated test databases.
+            script = ('import sys\n' + 'sys.path.insert(0, ' + repr(actual_app) + ')\n'
+                + 'from hq_server import serve, Panel\n'
+                + 'serve(' + str(port) + ', False, Panel(db=' + repr(str(root / 'hq.db'))
+                + ', queue_db=' + repr(str(root / 'queue.db')) + '))\n')
+            (root / 'app/hq_server.py').write_text(script, encoding='utf-8')
+            plan = {'root': str(root), 'job': str(job), 'nonce': 'real-panel-test',
+                    'python': sys.executable, 'port': port}
+            child = supervisor.start(plan)
+            try:
+                self.assertTrue(supervisor.healthy(plan, child, timeout=20),
+                                (job / 'panel.log').read_text(encoding='utf-8', errors='replace'))
+            finally:
+                if child.poll() is None:
+                    child.terminate()
+                child.wait(timeout=10)
+
     def test_parent_process_check_does_not_terminate_processes(self):
         self.assertTrue(supervisor.parent_alive(os.getpid()))
         child = subprocess.Popen([sys.executable, '-c', 'pass'])

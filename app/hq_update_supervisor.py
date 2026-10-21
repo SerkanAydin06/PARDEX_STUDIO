@@ -113,7 +113,7 @@ def healthy(plan, child, timeout=45):
         try:
             data = json.loads(receipt.read_text(encoding='utf-8'))
             if data == {'nonce': plan['nonce'], 'pid': child.pid}:
-                with urllib.request.urlopen(f"http://127.0.0.1:{plan['port']}/", timeout=2) as r:
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(f"http://127.0.0.1:{plan['port']}/", timeout=2) as r:
                     if r.status == 200:
                         time.sleep(2)
                         return child.poll() is None
