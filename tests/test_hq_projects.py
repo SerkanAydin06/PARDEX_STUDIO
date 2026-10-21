@@ -99,6 +99,30 @@ class ProjectLineTests(Base):
         hp.accept(pid, self.db)
         self.assertEqual(hp.get(pid, self.db)['stage'], 'tamamlandi')
 
+    def test_invalid_review_pauses_without_code_fix_and_shows_evidence(self):
+        ai = FakeAI()
+        pid = self.planned(ai)
+        hp.start(pid, self.db, ai=ai)
+        def reviewer_failure(role, *args, **kw):
+            result = ai(role, *args, **kw)
+            if role == 'review':
+                result.update(ok=False, output='EPERM: cannot read scripts directory')
+            return result
+        p = hp.run_production(pid, self.db, ai=reviewer_failure, tester=lambda f: (True, 'OK'))
+        self.assertEqual(p['stage'], 'soru')
+        self.assertEqual(p['packages'][0]['attempts'], 0)
+        self.assertEqual(p['packages'][0]['status'], 'takildi')
+        self.assertNotIn('fix', [c[0] for c in ai.calls])
+        self.assertTrue(any('EPERM' in c['text'] and 'Gemini' in c['text'] for c in p['chat']))
+        self.assertEqual(hp.open_questions(self.db)[0]['kind'], 'qa')
+
+    def test_review_envelopes_and_duplicate_verdicts(self):
+        good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
+        self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')
+        self.assertEqual(hp._qa('```text\n' + good + '\n```')[0], 'PASS')
+        self.assertIsNone(hp._qa('PARDEX_QA_VERDICT=FAIL\n' + good))
+        self.assertIsNone(hp._qa(json.dumps({'status': 'ERROR', 'response': good})))
+
     def test_untested_engine_asks_owner_once(self):
         ai = FakeAI(review_script=('PASS', 'PASS'))
         pid = self.planned(ai)

@@ -757,9 +757,22 @@ def _review_prompt(p, k, diff, test_ok, test, path=None):
 
 def _qa(output):
     import quality_manager
-    lines = [x for x in str(output).strip().splitlines() if x.strip()]
-    tail = '\n'.join(lines[-2:]) if len(lines) >= 2 else str(output)
-    return quality_manager._qa_result(tail)
+    text = str(output).strip()
+    for _ in range(2):
+        try:
+            envelope = json.loads(text)
+        except ValueError:
+            break
+        if not isinstance(envelope, dict) or envelope.get('status', 'SUCCESS') != 'SUCCESS':
+            return None
+        text = envelope.get('response', envelope.get('result', ''))
+        if not isinstance(text, str):
+            return None
+        text = text.strip()
+    if text.startswith('```') and text.endswith('```'):
+        text = '\n'.join(text.splitlines()[1:-1]).strip()
+    # Check the whole answer: duplicate verdicts must not be hidden by tail slicing.
+    return quality_manager._qa_result(text)
 
 
 def _line(output, key):
@@ -960,7 +973,14 @@ def _run(pid, path, ai, tester):
             if rev.get('provider') == res.get('provider'):
                 verdict = ('FAIL', 'Bağımsız denetçi kodu yazan sağlayıcıyla aynı')
             if verdict is None:
-                verdict = ('FAIL', 'Kalite incelemesi geçerli PASS/FAIL formatında dönmedi')
+                finding = 'Denetim yanıtı alınamadı veya geçerli PASS/FAIL biçiminde değil; kod hatası doğrulanmadı'
+                _pkg(k['id'], path, status='takildi', findings=finding, test=test)
+                detail = core.redact_log_output(rev.get('output', '')).strip()[-1800:] or 'Denetçi çıktı vermedi.'
+                _say(pid, 'kalite', f"Denetçi: {rev.get('provider', '?')} · CLI: {'başarılı' if rev.get('ok') else 'başarısız'}\n" + detail, path)
+                ask(pid, 'qa', finding + '. Denetçinin gerçek yanıtı proje sohbetinde gösterildi. '
+                    'Otomatik kod düzeltmesi yapılmadı ve düzeltme hakkı harcanmadı.',
+                    ['Denetçi sorununu düzelttim; paketi yeniden çalıştır'], k['id'], path)
+                return get(pid, path)
             try:
                 verdict = _extra_checks(p, k, folder, verdict, test_state, test, res['provider'], rev['provider'], ai, path)
             except router.BudgetStop as stop:
