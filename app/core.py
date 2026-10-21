@@ -258,8 +258,8 @@ def run(args,cwd,timeout=60,input_data=None,env=None,*,cancel_check=None):
                 remaining = timeout - (_time.monotonic() - start)
                 if remaining <= 0:
                     _stop_process_tree(proc)
-                    proc.communicate(timeout=5)
-                    return subprocess.CompletedProcess(argv, 124, 'Zaman asimi (' + str(timeout) + 's)')
+                    output, _ = proc.communicate(timeout=5)
+                    return subprocess.CompletedProcess(argv, 124, (output or '')[-9000:] + '\nZaman asimi (' + str(timeout) + 's)')
                 try:
                     output, _ = proc.communicate(input=pending, timeout=min(0.35, remaining))
                     return subprocess.CompletedProcess(argv, proc.returncode, (output or '')[-10000:])
@@ -272,8 +272,11 @@ def run(args,cwd,timeout=60,input_data=None,env=None,*,cancel_check=None):
                     proc.communicate(timeout=5)
                 except (OSError, subprocess.TimeoutExpired):
                     pass
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(argv,124, 'Zaman asimi ('+str(timeout)+'s). Islem durduruldu.')
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout or ''
+        if isinstance(output, bytes):
+            output = output.decode('utf-8', 'replace')
+        return subprocess.CompletedProcess(argv,124, output[-9000:] + '\nZaman asimi ('+str(timeout)+'s). Islem durduruldu.')
     except OSError as e:
         return subprocess.CompletedProcess(argv,127,'Program baslatilamadi: '+str(e))
 
@@ -371,7 +374,7 @@ def validate(project,engine=None):
         def passed(result):
             return result.returncode == 0 and not re.search(r'(SCRIPT ERROR|^ERROR:|Assertion failed)', result.stdout or '', re.M | re.I)
         good = passed(r)
-        reports = ['Godot import: ' + ('OK' if good else 'HATA') + '\n' + (r.stdout or '')[-1600:]]
+        reports = ['Godot çalıştırılabilir dosyası: ' + godot, 'Godot import: ' + ('OK' if good else 'HATA') + '\n' + (r.stdout or '')[-1600:]]
         if not good:
             return False, '\n'.join(reports)
         ran = 0
@@ -391,7 +394,7 @@ def validate(project,engine=None):
             ok = passed(result)
             good = good and ok
             ran += 1
-            reports.append('Birim testi ' + rel + ': ' + ('OK' if ok else 'HATA') + '\n' + (result.stdout or '')[-1600:])
+            reports.append('Birim testi ' + rel + ': ' + ('OK' if ok else 'HATA') + '\n' + (result.stdout or '')[-9000:])
         if len(candidates) > 12:
             reports.append('Birim testlerinin kalanları YAPILMADI (12 dosya sınırı).')
         if not ran:

@@ -188,6 +188,41 @@ class ProjectLineTests(Base):
         self.assertIn('özel test çalıştırıcısı gerekli', report)
         self.assertIn('Çalıştırılan bağımsız birim testi: 1', report)
 
+    def test_failed_engine_skips_review_and_fix_receives_complete_report(self):
+        ai = FakeAI(review_script=('PASS', 'PASS'))
+        pid = self.planned(ai)
+        hp.start(pid, self.db, ai=ai)
+        failure = 'SCRIPT ERROR: invalid typed array res://tests/test_controls.gd:113\n' + 'details\n' * 800 + 'Zaman asimi (60s)'
+        results = iter([(True, 'preflight'), (False, failure)])
+        seen_fix = []
+        def tester(folder):
+            return next(results, (True, 'All tests passed'))
+        def worker(role, prompt, cwd, dept, **kw):
+            if role == 'fix':
+                seen_fix.append(prompt)
+                self.assertEqual((Path(cwd) / '.studio/LAST_TEST.txt').read_text(), failure)
+            return ai(role, prompt, cwd, dept, **kw)
+        hp._set(pid, self.db, engine='godot')
+        with mock.patch.object(core, 'find_godot', return_value='C:/Godot tools/godot.exe'):
+            p = hp.run_production(pid, self.db, ai=worker, tester=tester)
+        roles = [c[0] for c in ai.calls]
+        start = roles.index('implement')
+        self.assertEqual(roles[start:start+3], ['implement', 'fix', 'review'])
+        self.assertIn('C:/Godot tools/godot.exe', seen_fix[0])
+        self.assertIn('test_controls.gd:113', seen_fix[0])
+        self.assertIn('LAST_TEST.txt', seen_fix[0])
+        self.assertEqual(p['stage'], 'teslim')
+
+    def test_timeout_retains_original_script_error(self):
+        import subprocess
+        failure = subprocess.TimeoutExpired(['godot'], 60,
+                    output=b'SCRIPT ERROR: invalid typed array test_controls.gd:113')
+        with mock.patch.object(core.subprocess, 'run', side_effect=failure):
+            result = core.run(['godot'], self.root, timeout=60)
+        self.assertEqual(result.returncode, 124)
+        self.assertIn('test_controls.gd:113', result.stdout)
+        self.assertIn('Zaman asimi', result.stdout)
+
     def test_review_envelopes_and_duplicate_verdicts(self):
         good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
         self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')
