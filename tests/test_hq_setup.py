@@ -236,7 +236,7 @@ class SetupActionTests(unittest.TestCase):
         import hq_server
         src = Path(hq_server.__file__).read_text(encoding='utf-8')
         pattern = re.search(r"/api/setup/\(install\|login\|verify\)/\(([^)]*)\)", src).group(1)
-        self.assertEqual(set(pattern.split('|')), {'git', 'node', 'claude', 'codex', 'gemini', 'copilot'})
+        self.assertEqual(set(pattern.split('|')), {'git', 'node', 'gh', 'claude', 'codex', 'gemini', 'copilot'})
 
     def test_copilot_is_optional_and_only_trusted_after_test(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(core, 'HOME', Path(tmp)):

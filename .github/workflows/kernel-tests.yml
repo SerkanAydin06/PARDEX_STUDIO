@@ -21,3 +21,13 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Compile core
         run: python -m compileall -q app
+  windows-update:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Windows update and rollback regression (no cloud AI)
+        run: python -m unittest discover -s tests -p 'test_hq_update.py' -v

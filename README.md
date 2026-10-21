@@ -14,6 +14,7 @@ Sonraki açılışlarda yalnızca `09_SIRKET_PANELI.cmd` yeterli.
 
 ## Belgeler
 
+- [GitHub güncellemesi ve otomatik yeniden başlatma](docs/OTOMATIK_GUNCELLEME.md)
 - [Otomatik teknik bakım ve sınırları](docs/TEKNIK_BAKIM.md)
 
 - [Proje Hattı ve model seçimi](docs/PHASE4_PROJE_HATTI.md) · [GitHub Copilot Pro desteği](docs/HQ_COPILOT_CLI.md)
