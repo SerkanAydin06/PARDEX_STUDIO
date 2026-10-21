@@ -228,12 +228,14 @@
     } else {
       const qs = p.questions.filter((q) => q.status === 'acik').map((q) => Object.assign({ product: p.name }, q));
       const review = (p.chat || []).filter((m) => m.role === 'kalite').slice(-1)[0];
+      const blockedTest = p.packages.find((k) => k.status === 'takildi' && k.test);
       body = `${questionCards(qs)}
-        ${review ? `<section aria-label="Son denetçi yanıtı"><h3>Son denetçi yanıtı</h3><pre class="report">${esc(review.text)}</pre></section>` : ''}
+        ${blockedTest ? `<section aria-label="Takılan paketin test çıktısı"><h3>Takılan paketin test çıktısı</h3><div class="small muted">${esc(blockedTest.title)} · ${esc(blockedTest.updated_at || '')}</div><pre class="report">${esc(blockedTest.test)}</pre></section>` : ''}
+        ${review ? `<section aria-label="Son denetçi yanıtı"><h3>Son kaydedilen AI denetimi</h3><div class="small muted">${esc(review.at || '')} · Güncel motor testiyle aynı çalıştırmaya ait olmayabilir.</div><pre class="report">${esc(review.text)}</pre></section>` : ''}
         <div class="small muted wrapall">Klasör (ayrı depo): ${esc(p.folder)}</div>
         <div class="stack">${p.packages.map((k) => `<div class="pkg ${k.status}"><div class="pkg-head"><b>${k.seq}. ${esc(k.title)}</b><span class="chip ${k.status === 'calisiyor' || k.status === 'duzeltme' ? 'calisiyor' : (k.status === 'takildi' ? 'onay' : '')}">${KSTATE[k.status]}</span></div>
           <div class="small muted">${esc(META ? (META.departments[k.dept] || {}).name : k.dept)}${k.provider ? ' · ' + esc(k.provider) + ' ' + esc(k.model) : ''}${k.attempts ? ' · ' + k.attempts + ' düzeltme turu' : ''}</div>
-          ${k.findings ? `<div class="small">Kontrol: ${esc(k.findings)}</div>` : ''}${k.summary ? `<div class="small">Yapılan: ${esc(k.summary)}</div>` : ''}</div>`).join('')}</div>
+          ${k.findings ? `<div class="small">Kontrol: ${esc(k.findings)}</div>` : ''}${k.summary ? `<div class="small">AI açıklaması: ${esc(k.summary)}</div>` : ''}</div>`).join('')}</div>
         ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<pre class="report">${esc(p.report)}</pre>` : ''}
         <div class="row">
           ${p.stage === 'uretim' && p.packages.length === 0 && !running ? '<button class="btn btn-teal" id="p-retry-plan" type="button">İş planını yeniden dene</button>' : ''}
