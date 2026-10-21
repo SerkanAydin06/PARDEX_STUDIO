@@ -351,21 +351,24 @@ def _mark(folder, pid):
     (meta / MARKER).write_text(pid, encoding='utf-8')
 
 
-def _reclaim(folder, pid, root, legacy_name=False):
-    """Remove a leftover folder from an earlier FAILED start of this same product, so it can be retried.
+def _reserve_folder(root, desired):
+    """Atomically reserve a NEW child folder; never reclaim/delete existing content.
 
-    Only inside the product root, only for a product still in planning, and only if the folder carries this
-    product's marker (or, for copies made before markers existed, the copy name that embeds the product id).
+    Even a matching old PARDEX marker is insufficient authority for erasure:
+    an interrupted copy may contain edits worth recovering manually.
     """
-    folder, root = Path(folder), Path(root).resolve()
-    if not folder.exists() or folder.is_symlink() or folder.resolve().parent != root:
-        return False
-    marker = folder / '.studio' / MARKER
-    ours = (marker.is_file() and marker.read_text(encoding='utf-8').strip() == pid) or legacy_name
-    if not ours:
-        return False
-    shutil.rmtree(folder)
-    return True
+    root = Path(root).resolve()
+    prefix = core.safe_name(desired)  # matches core.create_project's 50-character limit
+    for retry in range(100):
+        suffix = '' if retry == 0 else f'-deneme-{retry}'
+        name = prefix[:50 - len(suffix)] + suffix
+        candidate = root / name
+        try:
+            candidate.mkdir(mode=0o700, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            continue
+    raise FileExistsError('Yeni ürün klasörü için boş ad bulunamadı; mevcut dosyalara dokunulmadı')
 
 
 def _write_skipped(folder, skipped):
@@ -408,15 +411,18 @@ def prepare_folder(p, path=None, existing=''):
             if source.is_symlink():
                 raise ValueError('Sembolik bağlantı proje klasörü kullanılamaz')
             source = source.resolve(strict=True)
-            if _inside_company(source) or not source.is_dir() or core.project_type(source) == 'unknown':
+            actual_engine = core.project_type(source)
+            if _inside_company(source) or not source.is_dir() or actual_engine == 'unknown':
                 raise ValueError('Mevcut proje geçersiz veya şirket deposunun içinde')
+            if actual_engine != spec.get('engine'):
+                raise ValueError(
+                    f"Seçilen proje motoru {spec.get('engine')!r}, bağlanan klasörün motoru "
+                    f"{actual_engine!r}; doğru klasörü bağla veya tarifi güncelle")
             if root == source or root.is_relative_to(source):
                 raise ValueError('Çalışma kopyası mevcut projenin içinde olamaz')
             root.mkdir(parents=True, exist_ok=True)
-            folder = root / (_slug(spec.get('name') or p['name']) + '-kopya-' + p['id'][2:])
-            if folder.exists() and not _reclaim(folder, p['id'], root, legacy_name=p['stage'] == 'planlama'):
-                raise FileExistsError('Aynı isimde çalışma kopyası zaten var; üzerine yazılmadı')
-            folder.mkdir(mode=0o700)
+            folder = _reserve_folder(root, _slug(spec.get('name') or p['name']) +
+                                     '-kopya-' + p['id'][2:])
             created = folder
             _mark(folder, p['id'])
             # copy errors include disk-full OSError, not just validation failures
@@ -430,17 +436,12 @@ def prepare_folder(p, path=None, existing=''):
         else:
             root.mkdir(parents=True, exist_ok=True)
             base = _slug(spec.get('name') or p['name'])
-            folder = root / base
-            # Leftovers are removed only when they carry THIS product's marker; any other folder is kept
-            # and a more specific free name is used instead.
-            for name in (base, base + '-' + p['id'][-4:], base + '-' + p['id'][2:]):
-                folder = root / name
-                if not (folder.exists() and any(folder.iterdir())) or _reclaim(folder, p['id'], root):
-                    break
-            else:
-                raise FileExistsError('Uygun boş proje klasörü bulunamadı; ürün klasöründe yer aç')
-            folder = core.create_project(root, folder.name, spec['engine'], spec.get('summary', ''))
+            # Reserve before invoking core.create_project: if it fails halfway
+            # (disk full, Flutter failure, permissions), only this empty/new
+            # reservation can be cleaned, not pre-existing user content.
+            folder = _reserve_folder(root, base + '-' + p['id'][2:])
             created = folder
+            core.create_project(root, folder.name, spec['engine'], spec.get('summary', ''))
             _mark(folder, p['id'])
         _write_brief(folder, spec)
         _write_skipped(folder, skipped)
@@ -453,7 +454,10 @@ def prepare_folder(p, path=None, existing=''):
         _commit(folder, 'PARDEX: proje başlangıcı')
     except BaseException:
         if created is not None:
-            shutil.rmtree(created, ignore_errors=True)  # only what this call created
+            # created was obtained exclusively via mkdir(exist_ok=False).
+            # Refuse cleanup if the path was swapped out for a symlink.
+            if not created.is_symlink() and created.exists() and created.resolve().parent == root:
+                shutil.rmtree(created, ignore_errors=True)
         raise
     return folder
 

@@ -66,14 +66,16 @@ class StartRecoveryTests(unittest.TestCase):
             self.assertEqual(hp.start(pid, self.db, ai=FakeAI(), existing_folder=existing)['stage'], 'uretim')
             shutil.rmtree(self.work)
 
-    def test_legacy_leftover_copy_is_reclaimed(self):
+    def test_legacy_leftover_copy_is_preserved(self):
         pid = self.product()
         leftover = self.work / ('Vadi-kopya-' + pid[2:])
         (leftover / '.studio').mkdir(parents=True)
-        (leftover / 'project.godot').write_text('x')  # made by an older version, no marker
+        (leftover / 'project.godot').write_text('x')  # old version, no ownership marker
+        (leftover / 'valuable.gd').write_text('user changes', encoding='utf-8')
         p = hp.start(pid, self.db, ai=FakeAI(), existing_folder=str(self.original))
-        self.assertEqual(Path(p['folder']), leftover.resolve())
-        self.assertTrue((leftover / '.git').is_dir())
+        self.assertNotEqual(Path(p['folder']), leftover.resolve())
+        self.assertTrue((Path(p['folder']) / '.git').is_dir())
+        self.assertEqual((leftover / 'valuable.gd').read_text(), 'user changes')
 
     def test_other_products_folders_are_never_deleted(self):
         a = self.product('Vadi', 'web')
