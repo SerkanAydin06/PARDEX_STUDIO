@@ -23,7 +23,13 @@ CLIS = {
               'login': ['codex', 'login'], 'role': 'Kod yazımı ve düzeltme'},
     'gemini': {'name': 'Gemini CLI', 'plan': 'Google AI Pro', 'npm': '@google/gemini-cli',
                'login': ['gemini'], 'role': 'Bağımsız kod denetimi ve Ar-Ge'},
+    'copilot': {'name': 'GitHub Copilot CLI', 'plan': 'Copilot Pro · isteğe bağlı', 'npm': '@github/copilot',
+                'login': ['copilot', 'login'], 'optional': True,
+                'role': 'Yedek çalışan: kod, inceleme, plan (Ar-Ge yapamaz)'},
 }
+# Variables that would make a CLI use a token/API key instead of the owner's subscription login.
+NOT_SUBSCRIPTION = ('COPILOT_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'COPILOT_PROVIDER_API_KEY',
+                    'COPILOT_PROVIDER_BASE_URL', 'COPILOT_OFFLINE')
 BASE_TOOLS = {
     'git': {'name': 'Git', 'winget': 'Git.Git', 'url': 'https://git-scm.com/downloads/win',
             'why': 'Her ürün kendi Git deposunda tutulur'},
@@ -35,10 +41,17 @@ _LOCK = threading.Lock()
 _CACHE = {'at': 0.0, 'data': None}
 
 
+def _env():
+    env = core.safe_env()
+    for key in NOT_SUBSCRIPTION:
+        env.pop(key, None)
+    return env
+
+
 def _run(argv, timeout=20):
     try:
-        r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                           encoding='utf-8', errors='replace', timeout=timeout, env=core.safe_env(), check=False)
+        r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, stdin=subprocess.DEVNULL,
+                           encoding='utf-8', errors='replace', timeout=timeout, env=_env(), check=False)
         return r.returncode, (r.stdout or '').strip()
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 127, type(exc).__name__
@@ -82,8 +95,8 @@ def _gemini_login(_exe, home=None):
     Google login file or a successful "Test et" means yes; a chosen method with credentials in the system
     keychain cannot be seen from here (unknown). Never a false 'yes'."""
     v = _verified().get('gemini')
-    if v and v.get('ok'):
-        return 'yes', 'Giriş doğrulandı (Test et)'
+    if v:
+        return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('no', 'Son test: giriş yapılmamış')
     base = Path(home or Path.home()) / '.gemini'
     if (base / 'oauth_creds.json').is_file():
         return 'yes', 'Google hesabıyla giriş yapılmış'
@@ -97,7 +110,16 @@ def _gemini_login(_exe, home=None):
     return 'unknown', 'Giriş yapılmış görünüyor ama doğrulanamadı; "Test et"e bas'
 
 
-LOGIN_CHECK = {'claude': _claude_login, 'codex': _codex_login, 'gemini': _gemini_login}
+def _copilot_login(_exe):
+    """Copilot keeps its login in the system credential store and has no status command: only a
+    "Test et" result is trusted (when logged out the CLI refuses before sending anything)."""
+    v = _verified().get('copilot')
+    if v:
+        return ('yes', 'Giriş doğrulandı (Test et)') if v.get('ok') else ('no', 'Son test: giriş yapılmamış')
+    return 'unknown', 'Giriş durumu dışarıdan okunamıyor; giriş yaptıysan "Test et"e bas'
+
+
+LOGIN_CHECK = {'claude': _claude_login, 'codex': _codex_login, 'gemini': _gemini_login, 'copilot': _copilot_login}
 
 
 # ---------------- status ----------------
@@ -124,8 +146,9 @@ def status(force=False):
         exe = core.which(key)
         row = {'key': key, 'name': spec['name'], 'plan': spec['plan'], 'why': spec['role'], 'version': '',
                'installed': bool(exe), 'login': 'no', 'ok': False, 'actions': []}
+        row['optional'] = bool(spec.get('optional'))
         if not exe:
-            row['detail'] = 'Kurulu değil'
+            row['detail'] = 'Kurulu değil' + (' (isteğe bağlı)' if spec.get('optional') else '')
             row['actions'] = ['install'] if npm else []
             if not npm:
                 row['detail'] += ' (önce Node.js kur)'
@@ -133,8 +156,10 @@ def status(force=False):
             row['version'] = _version(_run([exe, '--version'])[1])
             state, detail = LOGIN_CHECK[key](exe)
             row.update(login=state, detail=detail, ok=state == 'yes')
+            testable = key in VERIFY
             row['actions'] = (['update'] if state == 'yes' else
-                              ['verify', 'login', 'update'] if state == 'unknown' else ['login', 'update'])
+                              ['verify', 'login', 'update'] if state == 'unknown' else
+                              ['login', 'verify', 'update'] if testable else ['login', 'update'])
             logged += state == 'yes'
         if key in JOBS and JOBS[key]['state'] == 'running':
             row['actions'] = []
@@ -157,7 +182,7 @@ def _next_step(items, usable):
     nologin = [i['name'] for i in items if i['key'] in CLIS and i['installed'] and i['login'] == 'no']
     if usable < 2 and nologin:  # already installed: a login is the quickest way to a second AI
         return f"Giriş yap: {', '.join(nologin)}."
-    missing = [i['name'] for i in items if i['key'] in CLIS and not i['installed']]
+    missing = [i['name'] for i in items if i['key'] in CLIS and not i['installed'] and not i.get('optional')]
     unsure = [i['name'] for i in items if i['key'] in CLIS and i['login'] == 'unknown']
     if usable < 2 and unsure:
         return f"Girişini doğrula: {', '.join(unsure)} için \"Test et\"e bas (giriş yoksa hiç kota harcanmaz)."
@@ -165,7 +190,7 @@ def _next_step(items, usable):
         return f"AI programlarını kur: {', '.join(missing)}."
     if usable < 2:
         return 'En az iki farklı AI’nın kurulu ve girişli olması gerekiyor.'
-    rest = [i['name'] for i in items if i['key'] in CLIS and not i['ok']]
+    rest = [i['name'] for i in items if i['key'] in CLIS and not i['ok'] and (i['installed'] or not i.get('optional'))]
     if rest:
         return f"Hazırsın. İstersen {', '.join(rest)} için de kurulum/girişi tamamla; iş daha dengeli dağılır."
     return 'Her şey hazır. Projeler sekmesinden ilk projeni başlat.'
@@ -226,8 +251,12 @@ def login_command(key):
 def login(key, opener=None):
     """Open the provider's own sign-in in a visible console window (the owner types nothing into PARDEX)."""
     argv = login_command(key)
+    data = _verified()
+    if data.pop(key, None) is not None:  # a new login makes an old "Test et" result stale
+        core.save_json(core.HOME / 'hq' / 'setup_verified.json', data)
     title = f"PARDEX - {CLIS[key]['name']} girisi"
-    hint = {'claude': 'Tarayıcıda Claude hesabınla giriş yap, sonra bu pencereyi kapat.',
+    hint = {'copilot': 'Tarayıcıda GitHub hesabınla (Copilot Pro) giriş yap, sonra bu pencereyi kapat ve "Test et"e bas.',
+            'claude': 'Tarayıcıda Claude hesabınla giriş yap, sonra bu pencereyi kapat.',
             'codex': 'Tarayıcıda ChatGPT hesabınla giriş yap, sonra bu pencereyi kapat.',
             'gemini': '"Login with Google" seç, tarayıcıda giriş yap; açılan sohbette /quit yazıp çık.'}[key]
     if os.name == 'nt':
@@ -240,7 +269,8 @@ def login(key, opener=None):
             'message': f"Bir terminal aç ve şunu çalıştır: {' '.join(argv)} — {hint}"}
 
 
-VERIFY = {'gemini': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.']}
+VERIFY = {'gemini': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.'],
+          'copilot': lambda exe: [exe, '-p', 'Sadece OK yaz. Başka hiçbir şey yazma.']}
 
 
 def verify(key):
@@ -259,6 +289,6 @@ def verify(key):
     _CACHE['data'] = None
     if ok:
         return {'ok': True, 'message': f"{CLIS[key]['name']} girişi doğrulandı (1 küçük çağrı kullanıldı)."}
-    reason = 'Giriş yapılmamış' if re.search(r'auth', out, re.I) else 'Test başarısız'
+    reason = 'Giriş yapılmamış' if re.search(r'auth|login', out, re.I) else 'Test başarısız'
     return {'ok': False, 'message': f"{reason}: \"Giriş yap\" ile hesabınla giriş yap, sonra tekrar test et.",
             'detail': core.redact_log_output(out)[-300:]}

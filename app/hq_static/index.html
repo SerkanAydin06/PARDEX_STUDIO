@@ -27,11 +27,12 @@
     <button class="tab" data-view="setup" type="button">Kurulum <span id="setup-badge" class="badge" hidden>!</span></button>
     <button class="tab" data-view="projects" type="button">Projeler</button>
     <button class="tab" data-view="jobs" type="button">İşler</button>
-    <button class="tab" data-view="ideas" type="button">Fikirler &amp; Ar-Ge</button>
-    <button class="tab" data-view="depts" type="button">Departmanlar</button>
-    <button class="tab" data-view="finance" type="button">Finans</button>
-    <button class="tab" data-view="board" type="button">Yönetim</button>
-    <button class="tab" data-view="settings" type="button">Ayarlar</button>
+    <button class="btn btn-ghost-dark" id="advanced-toggle" type="button" aria-expanded="false">Diğer bölümler</button>
+    <button class="tab advanced-tab" data-view="ideas" type="button">Fikirler &amp; Ar-Ge</button>
+    <button class="tab advanced-tab" data-view="depts" type="button">Departmanlar</button>
+    <button class="tab advanced-tab" data-view="finance" type="button">Finans</button>
+    <button class="tab advanced-tab" data-view="board" type="button">Yönetim</button>
+    <button class="tab advanced-tab" data-view="settings" type="button">Ayarlar</button>
   </nav>
 </header>
 
@@ -40,6 +41,16 @@
 
   <!-- OFİS -->
   <section id="view-office" class="view">
+    <div class="card owner-start">
+      <h1>Ne üretmek istiyorsun?</h1>
+      <p>Proje oluştur, istediğini anlat. Ekip üretsin; sonucu sen incele.</p>
+      <div class="row">
+        <button class="btn btn-teal" data-open-view="projects" type="button">1. Proje oluştur / devam et</button>
+        <button class="btn btn-line" data-open-view="jobs" type="button">2. Departman işlerini takip et</button>
+        <button class="btn btn-line" data-open-view="projects" type="button">3. Proje teslimini incele</button>
+      </div>
+      <p class="muted small">Yeni oyun ve uygulamalar için Projeler'i kullan. Aşağıdaki hedef alanı departmanlara ayrı işler verir.</p>
+    </div>
     <div id="kpis" class="kpis"></div>
     <div class="split">
       <div class="card grow">
@@ -70,10 +81,12 @@
         </div>
       </aside>
     </div>
+    <details class="office-details"><summary>Şirketin departmanlarını ve fikir hattını göster</summary>
     <h2 class="section-title">Departmanlar</h2>
     <div id="dept-mini" class="grid-cards"></div>
     <h2 class="section-title">Üretim Hattı: fikirden gelire</h2>
     <div class="scroll-x"><div id="pipeline" class="pipeline"></div></div>
+    </details>
   </section>
 
   <!-- KURULUM -->

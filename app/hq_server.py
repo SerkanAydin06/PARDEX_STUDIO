@@ -290,7 +290,7 @@ def make_handler(panel):
                 if resume:
                     panel.produce_async(pid)
                 return {'product': pid, 'resumed': resume}
-            m = re.fullmatch(r'/api/setup/(install|login|verify)/(git|node|claude|codex|gemini)', p)
+            m = re.fullmatch(r'/api/setup/(install|login|verify)/(git|node|claude|codex|gemini|copilot)', p)
             if m:
                 return {'install': setup.install, 'login': setup.login, 'verify': setup.verify}[m.group(1)](m.group(2))
             if p == '/api/board/message':

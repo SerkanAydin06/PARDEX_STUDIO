@@ -16,6 +16,9 @@ Hiçbir hesap bilgisi ya da API anahtarı istenmez veya kaydedilmez.
   - Claude: `claude auth status`
   - Codex: `codex login status`
   - Gemini: durum komutu olmadığı için önce ayar ve giriş dosyalarına bakılır. Emin olunamazsa "doğrulanamadı" gösterilir ve **Test et** düğmesi çıkar. Giriş yoksa Gemini istek göndermeden hata verir (0 kota); giriş varsa tek küçük çağrı yapılır.
+- **GitHub Copilot CLI (isteğe bağlı):** Kur (`@github/copilot`), Giriş yap (`copilot login`), Test et. Girişi sistemin kimlik deposunda tutulduğu için yalnızca test sonucuna güvenilir. Girişsizken CLI hiçbir şey göndermeden reddeder (0 kota); girişliyse test 1 küçük istek kullanır (Copilot Pro kredisi). Kurulu değilse "sıradaki adım"da önerilmez.
+- Testlerde ve girişlerde `GH_TOKEN`, `COPILOT_GITHUB_TOKEN` gibi token değişkenleri kaldırılır; abonelik girişi kullanılır.
+- "Giriş yap"a basınca eski test sonucu silinir; "Test et" her zaman yeniden denenebilir.
 - Yalnızca **doğrulanmış** girişler "hazır" sayılır. Şirket, en az iki farklı AI doğrulanınca hazırdır.
 
 ## Doğrulama

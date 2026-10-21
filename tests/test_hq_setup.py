@@ -164,7 +164,39 @@ class SetupActionTests(unittest.TestCase):
         import hq_server
         src = Path(hq_server.__file__).read_text(encoding='utf-8')
         pattern = re.search(r"/api/setup/\(install\|login\|verify\)/\(([^)]*)\)", src).group(1)
-        self.assertEqual(set(pattern.split('|')), {'git', 'node', 'claude', 'codex', 'gemini'})
+        self.assertEqual(set(pattern.split('|')), {'git', 'node', 'claude', 'codex', 'gemini', 'copilot'})
+
+    def test_copilot_is_optional_and_only_trusted_after_test(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(core, 'HOME', Path(tmp)):
+            setup._CACHE['data'] = None
+            out = {('node', '--version'): (0, 'v22.11.0'),
+                   ('claude', 'auth', 'status'): (0, '{"loggedIn": true}')}
+            w, r = fake_env({'git', 'node', 'npm', 'claude'}, out)
+            with w, r:
+                s = setup.status(force=True)
+            cop = [i for i in s['items'] if i['key'] == 'copilot'][0]
+            self.assertTrue(cop['optional'])
+            self.assertNotIn('Copilot', s['next'])  # never nags to install an optional tool
+            w, r = fake_env({'git', 'node', 'npm', 'claude', 'copilot'}, out)
+            with w, r:
+                cop = [i for i in setup.status(force=True)['items'] if i['key'] == 'copilot'][0]
+            self.assertEqual((cop['login'], cop['actions'][0]), ('unknown', 'verify'))
+            with fake_env({'copilot'}, {})[0], mock.patch.object(setup, '_run', return_value=(1, "Start 'copilot' and run the '/login' command")):
+                self.assertFalse(setup.verify('copilot')['ok'])
+            self.assertEqual(setup._copilot_login('copilot')[0], 'no')
+            with fake_env({'copilot'}, {})[0]:
+                setup.login('copilot')  # new login: stale "no" is forgotten (non-Windows path: no window opened)
+            self.assertEqual(setup._copilot_login('copilot')[0], 'unknown')
+            with fake_env({'copilot'}, {})[0], mock.patch.object(setup, '_run', return_value=(0, 'OK')):
+                self.assertTrue(setup.verify('copilot')['ok'])
+            w, r = fake_env({'git', 'node', 'npm', 'claude', 'copilot'}, out)
+            with w, r:
+                self.assertTrue(setup.status(force=True)['ready'])  # Claude + verified Copilot = two AIs
+
+    def test_subscription_login_is_not_replaced_by_tokens(self):
+        with mock.patch.dict(setup.os.environ, {'GH_TOKEN': 'x', 'COPILOT_GITHUB_TOKEN': 'y', 'ANTHROPIC_API_KEY': 'z'}):
+            env = setup._env()
+        self.assertFalse({'GH_TOKEN', 'COPILOT_GITHUB_TOKEN', 'ANTHROPIC_API_KEY'} & set(env))
 
 
 if __name__ == '__main__':

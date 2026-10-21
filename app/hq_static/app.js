@@ -414,6 +414,17 @@
   }
 
   /* ---------- events ---------- */
+  $('#advanced-toggle').addEventListener('click', () => {
+    const button = $('#advanced-toggle');
+    const expanded = button.getAttribute('aria-expanded') !== 'true';
+    button.setAttribute('aria-expanded', String(expanded));
+    button.textContent = expanded ? 'Daha az göster' : 'Diğer bölümler';
+    button.closest('nav').classList.toggle('expanded', expanded);
+    if (!expanded && $('.tab.active.advanced-tab')) show('office');
+  });
+  document.querySelectorAll('[data-open-view]').forEach((button) => {
+    button.addEventListener('click', () => show(button.dataset.openView));
+  });
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.view)));
   $('#approvals').addEventListener('click', onJobClick);
   $('#office-questions').addEventListener('click', onQuestion);
