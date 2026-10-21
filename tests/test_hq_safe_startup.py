@@ -36,7 +36,7 @@ class SafeStartupTests(unittest.TestCase):
         p = hp.new_product(name, 'oyun', self.db)
         hp._set(p['id'], self.db, spec=json.dumps({
             'name': name, 'engine': engine, 'summary': 'Oyun sahnesi',
-            'features': ['Gemi hareketi'], 'acceptance': ['Gemi hareket eder']}))
+            'features': ['Gemi hareketi', 'Ana menü'], 'acceptance': ['Gemi hareket eder']}))
         return hp.get(p['id'], self.db)
 
     def start(self, product, existing=''):
