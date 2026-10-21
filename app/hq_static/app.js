@@ -227,7 +227,9 @@
         <div class="row"><button class="btn btn-teal" id="do-it" type="button">Bunu yap</button><button class="btn btn-link" id="p-cancel" type="button">Projeyi iptal et</button></div>`;
     } else {
       const qs = p.questions.filter((q) => q.status === 'acik').map((q) => Object.assign({ product: p.name }, q));
+      const review = (p.chat || []).filter((m) => m.role === 'kalite').slice(-1)[0];
       body = `${questionCards(qs)}
+        ${review ? `<section aria-label="Son denetçi yanıtı"><h3>Son denetçi yanıtı</h3><pre class="report">${esc(review.text)}</pre></section>` : ''}
         <div class="small muted wrapall">Klasör (ayrı depo): ${esc(p.folder)}</div>
         <div class="stack">${p.packages.map((k) => `<div class="pkg ${k.status}"><div class="pkg-head"><b>${k.seq}. ${esc(k.title)}</b><span class="chip ${k.status === 'calisiyor' || k.status === 'duzeltme' ? 'calisiyor' : (k.status === 'takildi' ? 'onay' : '')}">${KSTATE[k.status]}</span></div>
           <div class="small muted">${esc(META ? (META.departments[k.dept] || {}).name : k.dept)}${k.provider ? ' · ' + esc(k.provider) + ' ' + esc(k.model) : ''}${k.attempts ? ' · ' + k.attempts + ' düzeltme turu' : ''}</div>
