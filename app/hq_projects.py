@@ -658,9 +658,14 @@ def start(pid, path=None, ai=None, existing_folder=''):
     if missing:
         raise ValueError('Tarif eksik: ' + ', '.join(missing) + '. Ürün Müdürüyle biraz daha konuş.')
     engine = p['spec']['engine']
-    if ai is None and not router.installed():
-        raise ValueError('İş planını hazırlamak için önce Claude, Codex veya Gemini CLI kurup giriş yap. '
-                         'Proje klasörü oluşturulmadı, AI çağrısı yapılmadı.')
+    if ai is None:
+        have = router.installed()
+        if not have:
+            raise ValueError('İş planını hazırlamak için önce Claude, Codex veya Gemini CLI kurup giriş yap. '
+                             'Proje klasörü oluşturulmadı, AI çağrısı yapılmadı.')
+        short = review_capacity(path, have)  # 0 token: no copy and no CEO call if production could not run
+        if short:
+            raise ValueError(short.replace('Hiç çağrı harcanmadı.', 'Proje klasörü oluşturulmadı, hiç çağrı harcanmadı.'))
     if engine not in CREATABLE and not existing_folder and not p['folder']:
         raise ValueError(f'{core.ENGINE_LABELS[engine]} projesini resmi editörde oluşturup klasörünü bağlaman gerekiyor')
 
@@ -765,7 +770,7 @@ def run_production(pid, path=None, ai=None, tester=None, have=None):
             missing = review_capacity(path, router.installed() if have is None else have)
             if missing:
                 p = get(pid, path)
-                if p['stage'] in ('uretim', 'soru') and not any(q['status'] == 'acik' for q in p['questions']):
+                if p['stage'] in ('uretim', 'soru', 'durdu') and not any(q['status'] == 'acik' for q in p['questions']):
                     ask(pid, 'qa', missing, ['Kurdum, yeniden kontrol et'], path=path)
                 return get(pid, path)
         return _run(pid, path, ai or router.call, tester or core.validate)
@@ -814,7 +819,7 @@ def _ignore_files(folder, files):
 
 def _run(pid, path, ai, tester):
     p = get(pid, path)
-    if p['stage'] not in ('uretim', 'soru'):
+    if p['stage'] not in ('uretim', 'soru', 'durdu'):  # 'durdu' = owner paused (e.g. to install the engine)
         raise ValueError('Bu proje üretimde değil')
     if any(q['status'] == 'acik' for q in p['questions']):
         raise ValueError('Önce açık soruyu cevapla')
@@ -843,6 +848,8 @@ def _run(pid, path, ai, tester):
         if not k:
             if not any(x['status'] == 'tamam' for x in p['packages']):
                 _set(pid, path, stage='durdu')
+                _say(pid, 'urun', 'Hiçbir paket tamamlanmadı, bu yüzden teslim yapılmadı. "Değişiklik iste" ile '
+                     'neyin farklı yapılmasını istediğini yaz; ekip yeni bir paketle yeniden dener.', path)
                 store.event('sistem', 'empty-delivery-blocked', pid,
                             'Hiçbir paket tamamlanmadı; teslim engellendi.', path)
                 return get(pid, path)
@@ -1112,8 +1119,10 @@ def accept(pid, path=None):
 def request_changes(pid, note, path=None):
     """Owner reviewed the delivery and wants changes: becomes a new package, then production resumes."""
     p = get(pid, path)
-    if p['stage'] not in ('teslim', 'tamamlandi'):
-        raise ValueError('Değişiklik isteği teslimden sonra yapılır')
+    if p['stage'] not in ('teslim', 'tamamlandi', 'durdu'):
+        raise ValueError('Değişiklik isteği teslimden sonra veya durdurulmuş projede yapılır')
+    if not p['folder']:
+        raise ValueError('Proje henüz başlatılmadı')
     note = _clean(note, 800)
     if len(note) < 6:
         raise ValueError('Ne değişmeli? Biraz daha açık yaz')

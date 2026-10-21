@@ -235,11 +235,11 @@
         ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<pre class="report">${esc(p.report)}</pre>` : ''}
         <div class="row">
           ${p.stage === 'uretim' && p.packages.length === 0 && !running ? '<button class="btn btn-teal" id="p-retry-plan" type="button">İş planını yeniden dene</button>' : ''}
-          ${(p.stage === 'uretim' || p.stage === 'durdu') && p.packages.length > 0 && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
+          ${(p.stage === 'uretim' || p.stage === 'durdu') && p.packages.some((k) => ['bekliyor', 'duzeltme', 'calisiyor', 'kayit'].includes(k.status)) && !running ? '<button class="btn btn-dark" id="p-run" type="button">Üretime devam et</button>' : ''}
           ${running ? '<span class="muted">Ekip çalışıyor… (bu sayfa kendini yeniler)</span>' : ''}
           ${p.stage === 'teslim' ? '<button class="btn btn-teal" id="p-accept" type="button">Teslimi kabul et</button>' : ''}
         </div>
-        ${p.stage === 'teslim' || p.stage === 'tamamlandi' ? `<form id="change-form"><label for="change-text">Değişiklik iste (ekip düzeltip yeniden teslim eder)</label><textarea id="change-text" rows="2"></textarea><div class="row"><button class="btn btn-line" type="submit">Değişikliği gönder</button></div></form>` : ''}`;
+        ${(p.stage === 'teslim' || p.stage === 'tamamlandi' || (p.stage === 'durdu' && !running)) ? `<form id="change-form"><label for="change-text">${p.stage === 'durdu' ? 'Değişiklik iste (ekip yeni bir paketle yeniden dener)' : 'Değişiklik iste (ekip düzeltip yeniden teslim eder)'}</label><textarea id="change-text" rows="2"></textarea><div class="row"><button class="btn btn-line" type="submit">Değişikliği gönder</button></div></form>` : ''}`;
     }
     $('#product-detail').innerHTML = `<div class="card-head"><h2>${esc(p.name)}</h2><span class="chip">${PSTAGE[p.stage]}</span></div>${stepper(p)}${body}`;
     bars($('#product-detail'));
