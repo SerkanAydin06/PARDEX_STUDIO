@@ -116,7 +116,7 @@ def build_cmd(provider, exe, model, effort, mode):
     return cmd
 
 
-def call(role, prompt, cwd, dept, *, avoid=(), timeout=900, path=None, runner=None, have=None, job_id=''):
+def call(role, prompt, cwd, dept, *, avoid=(), timeout=900, path=None, runner=None, have=None, job_id='', cancel_check=None):
     """One budgeted AI call. Returns dict(ok, output, provider, model, effort, reason, seconds)."""
     ok, why = store.budget_check(dept, 1, path)
     if not ok:
@@ -130,7 +130,10 @@ def call(role, prompt, cwd, dept, *, avoid=(), timeout=900, path=None, runner=No
     store.record(dept, 'ai_call', 1, provider, job_id=job_id, note=f'{role} · {model or "varsayılan"} {effort}'.strip(), path=path)
     t0 = time.monotonic()
     run = runner or core.run
-    r = run(cmd, Path(cwd), timeout=timeout, input_data=prompt, env=core.safe_env())
+    call_kw = {'timeout': timeout, 'input_data': prompt, 'env': core.safe_env()}
+    if cancel_check is not None and runner is None:
+        call_kw['cancel_check'] = cancel_check
+    r = run(cmd, Path(cwd), **call_kw)
     good = r.returncode == 0 and bool((r.stdout or '').strip())
     store.route_result(role, provider, good, path)
     return {'ok': good, 'output': core.redact_log_output(r.stdout or '')[-9000:], 'provider': provider,
