@@ -160,7 +160,7 @@
     const s = m.settings;
     $('#set-project').innerHTML = '<option value="">— Seçilmedi —</option>' + m.projects.map((p) => `<option value="${esc(p.path)}"${p.path === s.default_project ? ' selected' : ''}>${esc(p.name)} (${esc(p.engine)})</option>`).join('');
     $('#set-ollama').value = s.ollama_model || ''; $('#set-limit').value = s.weekly_call_limit; $('#set-currency').value = s.currency;
-    $('#set-day').value = s.day_call_limit; $('#set-root').value = s.projects_root || '';
+    $('#set-godot').value = s.godot_path || ''; $('#set-day').value = s.day_call_limit; $('#set-root').value = s.projects_root || '';
     $('#budget-grid').innerHTML = Object.entries(m.departments).map(([k, v]) => `<div><label for="b-${k}">${esc(v.name)}</label><input id="b-${k}" data-budget="${k}" type="number" min="0" max="200" value="${s.budgets[k]}"></div>`).join('');
     $('#l-dept').innerHTML = Object.entries(m.departments).map(([k, v]) => `<option value="${k}"${k === 'finans' ? ' selected' : ''}>${esc(v.name)}</option>`).join('');
     $('#events').innerHTML = evs.length ? evs.map((e) => `<div>${esc(e.at.slice(0, 16).replace('T', ' '))} · <b>${esc(e.actor)}</b> · ${esc(e.action)} ${esc(e.ref)} ${esc(e.note)}</div>`).join('') : '<div>Kayıt yok.</div>';
@@ -574,7 +574,7 @@
     const routing = {}; document.querySelectorAll('[data-route]').forEach((row) => {
       const prov = row.querySelector('.r-prov').value; if (prov) routing[row.dataset.route] = { provider: prov, model: row.querySelector('.r-model').value.trim(), effort: row.querySelector('.r-eff').value };
     });
-    act(() => api('/api/settings', { default_project: $('#set-project').value, ollama_model: $('#set-ollama').value.trim(), weekly_call_limit: Number($('#set-limit').value), day_call_limit: Number($('#set-day').value), projects_root: $('#set-root').value.trim(), currency: $('#set-currency').value, budgets, routing }), 'Ayarlar kaydedildi')
+    act(() => api('/api/settings', { default_project: $('#set-project').value, ollama_model: $('#set-ollama').value.trim(), weekly_call_limit: Number($('#set-limit').value), day_call_limit: Number($('#set-day').value), projects_root: $('#set-root').value.trim(), godot_path: $('#set-godot').value.trim(), currency: $('#set-currency').value, budgets, routing }), 'Ayarlar kaydedildi')
       .then(() => { META = null; });
   });
 
