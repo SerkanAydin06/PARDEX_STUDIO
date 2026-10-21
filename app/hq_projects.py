@@ -123,13 +123,16 @@ def open_questions(path=None):
     with _Tx(path) as db:
         return [dict(r, options=json.loads(r['options'])) for r in
                 db.execute('SELECT q.*, p.name product FROM questions q JOIN products p ON p.id=q.product_id '
-                           'WHERE q.status="acik" ORDER BY q.created_at')]
+                           'WHERE q.status="acik" AND p.stage!="iptal" ORDER BY q.created_at')]
 
 
 def _set(pid, path=None, **fields):
+    """Update a product. Cancellation is final: no code path can move an 'iptal' product to another stage."""
     fields['updated_at'] = _now()
+    cols = [(k + "=CASE WHEN stage='iptal' THEN 'iptal' ELSE ? END") if k == 'stage' else (k + '=?')
+            for k in fields]
     with _Tx(path) as db:
-        db.execute(f'UPDATE products SET {",".join(k + "=?" for k in fields)} WHERE id=?', (*fields.values(), pid))
+        db.execute(f'UPDATE products SET {",".join(cols)} WHERE id=?', (*fields.values(), pid))
 
 
 def _pkg(kid, path=None, **fields):
@@ -147,6 +150,8 @@ def ask(pid, kind, text, options, package_id='', path=None):
     """Bring an important decision to the owner and pause the project."""
     qid = 'Q-' + uuid.uuid4().hex[:9]
     with _Tx(path) as db:
+        if db.execute('SELECT stage FROM products WHERE id=?', (pid,)).fetchone()[0] == 'iptal':
+            return None  # a cancelled project never asks the owner anything again
         db.execute('INSERT INTO questions VALUES(?,?,?,?,?,?,?,?,?)',
                    (qid, pid, package_id, kind, _clean(text, 700), json.dumps(options, ensure_ascii=False), None, 'acik', _now()))
     _set(pid, path, stage='soru')
@@ -681,13 +686,18 @@ def start(pid, path=None, ai=None, existing_folder=''):
                  '\nBunlardan oyunun çalışması için gereken varsa söyle; gizli bilgiler (anahtar, şifre) kopyaya alınmaz.', path)
     else:
         folder = _restart_folder(p, path)
+    planner = ai or _native_ai(pid, path)  # CEO/plan-hook calls stop immediately if the owner cancels
     try:
         if fresh:  # do not bill/duplicate successful plan hooks on a retry
-            _plan_hooks(pid, path, ai or router.call)
-        planned = breakdown(pid, path, ai)
+            _plan_hooks(pid, path, planner)
+        if _stop_reason(pid, path) == 'iptal':
+            return get(pid, path)
+        planned = breakdown(pid, path, planner)
         if not planned['packages']:
             raise RuntimeError('AI iş paketi hazırlamadı. Üretime geçilmedi; yeniden deneyebilirsin.')
     except Exception as exc:
+        if _stop_reason(pid, path) == 'iptal':
+            return get(pid, path)  # owner cancelled during planning: not an error
         if legacy_retry:
             _set(pid, path, stage='planlama')
         store.event('sistem', 'planning-retry', pid,
@@ -776,6 +786,13 @@ def _checkpoint(pid, path):
     return bool(reason)
 
 
+def _native_ai(pid, path):
+    """Real AI router whose running CLI is killed as soon as the owner cancels or pauses."""
+    def native_ai(role, prompt, cwd, dept, **kw):
+        return router.call(role, prompt, cwd, dept, cancel_check=lambda: bool(_stop_reason(pid, path)), **kw)
+    return native_ai
+
+
 def run_production(pid, path=None, ai=None, tester=None, have=None):
     """Owner-started run over all open packages. Stops only for owner questions or delivery.
 
@@ -794,12 +811,7 @@ def run_production(pid, path=None, ai=None, tester=None, have=None):
                 if p['stage'] in ('uretim', 'soru', 'durdu') and not any(q['status'] == 'acik' for q in p['questions']):
                     ask(pid, 'qa', missing, ['Kurdum, yeniden kontrol et'], path=path)
                 return get(pid, path)
-        if ai is None:
-            def native_ai(role, prompt, cwd, dept, **kw):
-                return router.call(role, prompt, cwd, dept,
-                                   cancel_check=lambda: bool(_stop_reason(pid, path)), **kw)
-            ai = native_ai
-        return _run(pid, path, ai, tester or core.validate)
+        return _run(pid, path, ai or _native_ai(pid, path), tester or core.validate)
     finally:
         LOCK.release()
 
@@ -1128,6 +1140,9 @@ def answer(qid, answer_text, path=None):
         if not q:
             raise KeyError('Açık soru bulunamadı')
         q = dict(q)
+        if db.execute('SELECT stage FROM products WHERE id=?', (q['product_id'],)).fetchone()[0] == 'iptal':
+            db.execute('UPDATE questions SET status="iptal" WHERE id=?', (qid,))
+            raise ValueError('Bu proje iptal edildi; soru kapatıldı.')
         if q['kind'] == 'stuck' and str(answer_text).startswith('Bu paketin değişikliklerini'):
             raise ValueError('Tehlikeli git reset/clean işlemi kaldırıldı; kaynak dosyaların korunuyor.')
         db.execute('UPDATE questions SET status="cevaplandi", answer=? WHERE id=?', (_clean(answer_text, 600), qid))
@@ -1217,6 +1232,10 @@ def request_changes(pid, note, path=None):
 
 
 def cancel(pid, path=None):
+    """Final. Closes open questions; a running AI call notices within a second and is stopped."""
+    get(pid, path)  # KeyError for unknown product
     _set(pid, path, stage='iptal')
+    with _Tx(path) as db:
+        db.execute('UPDATE questions SET status="iptal" WHERE product_id=? AND status="acik"', (pid,))
     store.event('patron', 'product-cancel', pid, '', path)
     return get(pid, path)
