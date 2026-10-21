@@ -47,7 +47,7 @@ LEDGER_KINDS = ('ai_call', 'income', 'expense')
 DEFAULT_SETTINGS = {
     'paused': False,
     'weekly_call_limit': 200,
-    'day_call_limit': 40,
+    'day_call_limit': 100,
     'projects_root': str(Path.home() / 'PardexProjeler'),
     'godot_path': '',
     'routing': {},
@@ -87,6 +87,13 @@ def _conn(path=None):
     CREATE INDEX IF NOT EXISTS jobs_status ON jobs(status);
     CREATE INDEX IF NOT EXISTS ledger_week ON ledger(week, dept, kind);
     ''')
+    # One-time migration of the former default. Later owner changes are preserved.
+    migration = 'migration_day_limit_100'
+    if not db.execute('SELECT 1 FROM settings WHERE key=?', (migration,)).fetchone():
+        row = db.execute("SELECT value FROM settings WHERE key='day_call_limit'").fetchone()
+        if row and json.loads(row[0]) == 40:
+            db.execute("UPDATE settings SET value='100' WHERE key='day_call_limit'")
+        db.execute('INSERT INTO settings(key,value) VALUES(?,?)', (migration, 'true'))
     # Reclassify old setup checks without deleting usage or changing company totals.
     db.execute("UPDATE ledger SET dept='kalite' WHERE dept='ceo' AND kind='ai_call' AND note='Kurulum giriş testi'")
     db.commit()  # Finish migration before callers begin their own atomic transaction.
