@@ -10,3 +10,10 @@ Bu güncelleme, 4 hata sınıfını ele alır:
 Test kapsamı: 8 yeni çevrimdışı regresyon testi + mevcut çekirdek testleri.
 
 Bu CI, gerçek Windows/Godot/Claude/Codex/Gemini entegrasyon testi yerine geçmez. Bu akışta yerel AI CLI hâlâ işletim sistemi sandbox'ı değildir.
+
+## Başlatma kurtarma (sonraki düzeltme)
+
+5. **Git ön kontrolü:** "Bunu yap" dendiğinde Git kurulu değilse hiçbir klasör oluşturulmadan ve hiç çağrı harcanmadan kurulum bağlantısıyla durulur.
+6. **Tam temizlik:** Başlatmanın herhangi bir adımında (kopya, bağlama, Git deposu, ilk kayıt) hata olursa yalnızca bu denemenin oluşturduğu klasör silinir; "Bunu yap" her zaman yeniden denenebilir.
+7. **Takılı eski kopyalar:** Önceki sürümlerden kalan, bu ürüne ait yarım kopya (ürün kimliğini taşıyan `-kopya-<id>` adı veya `.studio/PARDEX_PRODUCT` işareti) yeniden denemede otomatik temizlenir. İşareti olmayan başka hiçbir klasör silinmez; gerekirse daha özgül bir ad seçilir.
+8. **Dışarıda kalanlar bildirilir:** Güvenli kopyaya alınmayan gizli adlı dosyalar, özel klasörler ve desteklenmeyen dosya türleri `.studio/KOPYA_DISARIDA.md` dosyasına yazılır, başlatmada plan sohbetinde patrona söylenir ve teslim raporunda listelenir. Orijinal dosyalar yerinde durur.

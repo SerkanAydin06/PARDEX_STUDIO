@@ -77,8 +77,12 @@ def _private(name: str) -> bool:
 
 
 def _snapshot(project: Path, *, target: Path | None = None, extra_extensions=frozenset(),
-              max_files=None, max_bytes=None):
-    """Copy allowlisted sources; reject symlinks; hash text files for exact change detection."""
+              max_files=None, max_bytes=None, skipped=None):
+    """Copy allowlisted sources; reject symlinks; hash text files for exact change detection.
+
+    `skipped` (optional dict) collects what was left out so the owner can be told:
+    {'secret': [relative paths], 'private_dirs': [...], 'other_types': {'.ext': count}}.
+    """
     allowed = COPY_EXTENSIONS | frozenset(extra_extensions)
     max_files = MAX_SOURCE_FILES if max_files is None else max_files
     max_bytes = MAX_SOURCE_BYTES if max_bytes is None else max_bytes
@@ -94,12 +98,21 @@ def _snapshot(project: Path, *, target: Path | None = None, extra_extensions=fro
                 raise ValueError('Symlink directory refused: ' + str(child))
             if _private(dirname):
                 dirs.remove(dirname)
+                if skipped is not None and dirname.casefold() not in {'.git', '.godot', '.import'}:
+                    skipped.setdefault('private_dirs', []).append((rel_dir / dirname).as_posix())
         for name in names:
             src = current / name
             if src.is_symlink():
                 raise ValueError('Symlink file refused: ' + str(src))
             if _private(name) or (src.suffix.lower() not in allowed and
                                   name.casefold() not in SAFE_DOTFILES):
+                if skipped is not None:
+                    if _secret_name(name):
+                        skipped.setdefault('secret', []).append((rel_dir / name).as_posix())
+                    elif not _private(name):
+                        ext = src.suffix.lower() or name.casefold()
+                        other = skipped.setdefault('other_types', {})
+                        other[ext] = other.get(ext, 0) + 1
                 continue
             if not src.is_file():
                 raise ValueError('Unexpected project file type')

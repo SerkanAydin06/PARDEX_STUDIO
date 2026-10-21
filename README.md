@@ -4,8 +4,8 @@ Yapay zekâların departmanlar hâlinde çalıştığı yerel yazılım şirketi
 
 ## Başlangıç (Windows)
 
-1. Python 3.10+ kur.
-2. `02_AI_CLI_KUR.cmd` ile Claude Code, Codex CLI ve Gemini CLI'ı kur; her birine kendi hesabınla giriş yap.
+1. Python 3.10+ ve [Git](https://git-scm.com/downloads/win) kur.
+2. `02_AI_CLI_KUR.cmd` ile Claude Code, Codex CLI ve Gemini CLI'ı kur; her birine kendi hesabınla giriş yap. Bağımsız kod kontrolü için **en az iki farklı AI** gerekir.
 3. `09_SIRKET_PANELI.cmd` dosyasına çift tıkla. Tarayıcıda **Patron Ofisi** açılır.
 4. **Projeler → Yeni proje**: Ürün Müdürüyle ana hatları konuş, "Bunu yap" de.
 
