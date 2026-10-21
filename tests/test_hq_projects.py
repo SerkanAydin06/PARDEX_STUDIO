@@ -223,6 +223,21 @@ class ProjectLineTests(Base):
         self.assertIn('test_controls.gd:113', result.stdout)
         self.assertIn('Zaman asimi', result.stdout)
 
+    def test_safe_save_failure_never_spends_ai_or_fix_attempt(self):
+        ai = FakeAI()
+        pid = self.planned(ai)
+        hp.start(pid, self.db, ai=ai)
+        before = len(ai.calls)
+        tester = lambda f: (False, 'ERROR: Safe save failed. This may be a permissions problem.')
+        p = hp.run_production(pid, self.db, ai=ai, tester=tester)
+        self.assertEqual(len(ai.calls), before)
+        self.assertEqual(p['packages'][0]['attempts'], 0)
+        q = hp.open_questions(self.db)[0]
+        self.assertEqual(q['kind'], 'environment')
+        hp.answer(q['id'], q['options'][0], self.db)
+        hp.run_production(pid, self.db, ai=ai, tester=tester)
+        self.assertEqual(len(ai.calls), before)
+
     def test_review_envelopes_and_duplicate_verdicts(self):
         good = 'PARDEX_QA_VERDICT=PASS\nPARDEX_QA_FINDINGS=Sorun yok, kabul ölçütüne uygun'
         self.assertEqual(hp._qa(json.dumps({'status': 'SUCCESS', 'response': good}))[0], 'PASS')

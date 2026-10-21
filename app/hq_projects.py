@@ -909,6 +909,28 @@ def _ignore_files(folder, files):
             out.write(('' if not have or have[-1] == '' else '\n') + '# PARDEX: patron Git dışında bıraktı\n' + '\n'.join(add) + '\n')
 
 
+def _test_environment_error(output):
+    text = str(output).casefold()
+    return any(marker in text for marker in (
+        'safe save failed', 'permission denied', 'access is denied',
+        'erişim reddedildi', 'errno 13', 'eperm',
+    ))
+
+
+def _pause_test_environment(pid, folder, output, path, package=None):
+    report = _record_test_report(folder, output)
+    if package:
+        _pkg(package['id'], path, status='takildi', test=report,
+             findings='Motor dosya erişimi engellendi; kod hatası doğrulanmadı')
+    _say(pid, 'kalite', 'Motor ortam hatası (AI denetimi yapılmadı):\n' + report, path)
+    ask(pid, 'environment',
+        'Godot dosya kaydedemedi veya okuyamadı. Açık Godot pencerelerini kapat. '
+        'Windows Güvenliği koruma geçmişinde bu Godot dosyasının engellenip engellenmediğini kontrol et. '
+        'Bu engel kod hatası sayılmadı; erişim sağlanana kadar AI çağrısı yapılmayacak.',
+        ['Motor erişimini kontrol et; düzelmişse devam et'],
+        package['id'] if package else '', path)
+
+
 def _record_test_report(folder, output):
     text = core.redact_log_output(output)
     report_folder = folder / '.studio'
@@ -939,6 +961,11 @@ def _run(pid, path, ai, tester):
     if not p['allow_untested']:
         ok0, test0 = tester(folder)  # K0, 0 token: can this machine test the engine at all?
         if _checkpoint(pid, path):
+            return get(pid, path)
+        if not ok0 and _test_environment_error(test0):
+            pending = next((x for x in get(pid, path)['packages']
+                            if x['status'] in ('bekliyor', 'duzeltme', 'calisiyor', 'denetim')), None)
+            _pause_test_environment(pid, folder, test0, path, pending)
             return get(pid, path)
         if not ok0 and UNTESTED.search(str(test0)):
             ask(pid, 'untested', 'Motor testi bu bilgisayarda çalıştırılamıyor: ' + core.redact_log_output(test0)[:300],
@@ -1010,6 +1037,9 @@ def _run(pid, path, ai, tester):
             _pkg(k['id'], path, status='denetim', summary=_line(res['output'], 'PARDEX_DONE') or k['summary'] or 'Kod üretildi')
             ok_test, test = tester(folder)
             if _checkpoint(pid, path):
+                return get(pid, path)
+            if not ok_test and _test_environment_error(test):
+                _pause_test_environment(pid, folder, test, path, k)
                 return get(pid, path)
             test = _record_test_report(folder, test)
             untestable = (not ok_test) and bool(UNTESTED.search(test))
@@ -1246,6 +1276,11 @@ def answer(qid, answer_text, path=None):
             for k in p['packages']:
                 if k['status'] in ('bekliyor', 'duzeltme', 'denetim'):
                     _pkg(k['id'], path, status='atlandi', findings='Patron burada durdurdu')
+    elif q['kind'] == 'environment':
+        # An explicit retry checks the local engine before spending any AI call.
+        if kid:
+            k = next((x for x in p['packages'] if x['id'] == kid), None)
+            _pkg(kid, path, status='denetim' if k and k['provider'] else 'bekliyor')
     elif q['kind'] == 'untested':
         if a.startswith('Testsiz'):
             _set(pid, path, allow_untested=1)
