@@ -262,11 +262,14 @@ def make_handler(panel):
                 return self._err(500, type(exc).__name__ + ': ' + str(exc)[:200])
 
         def _route(self, p, b):
+            # Emergency stop must never wait behind a synchronous AI request.
+            if p == '/api/update/cancel':
+                panel.updater.cancel_wait()
+                return {'cancelled': True}
+            if p == '/api/pause' or re.fullmatch(r'/api/product/P-[0-9a-f]{9}/cancel', p):
+                return self._route_impl(p, b)
             with panel.mutation_lock:
-                if p == '/api/update/cancel':
-                    panel.updater.cancel_wait()
-                    return {'cancelled': True}
-                if panel.updater.busy() and p != '/api/pause' and not re.fullmatch(r'/api/product/P-[0-9a-f]{9}/(pause|cancel)', p):
+                if panel.updater.busy():
                     raise ValueError('Güncelleme bekleniyor/sürüyor; yeni işlem başlatılamaz.')
                 return self._route_impl(p, b)
 

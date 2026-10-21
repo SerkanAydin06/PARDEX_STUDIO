@@ -241,7 +241,7 @@ class UpdateRoutes(unittest.TestCase):
                 request = urllib.request.Request(f'http://127.0.0.1:{server.server_port}' + path,
                     data=json.dumps(body or {}).encode(), headers={'X-PARDEX-Token': token, 'Content-Type': 'application/json'})
                 try:
-                    with urllib.request.urlopen(request) as result:
+                    with urllib.request.urlopen(request, timeout=3) as result:
                         return result.status
                 except urllib.error.HTTPError as exc:
                     return exc.code
@@ -253,7 +253,9 @@ class UpdateRoutes(unittest.TestCase):
                 panel.updater.busy.return_value = True
                 self.assertEqual(post('/api/update'), 400)
                 self.assertEqual(post('/api/goal', body={'text': 'must not run'}), 400)
-                self.assertEqual(post('/api/update/cancel'), 200)
+                with panel.mutation_lock:
+                    self.assertEqual(post('/api/pause', body={'paused': True}), 200)
+                    self.assertEqual(post('/api/update/cancel'), 200)
                 panel.updater.cancel_wait.assert_called_once()
                 panel.updater.busy.return_value = False
                 with mock.patch.object(hq_server.board, 'core_get', return_value={'ready': False}):
