@@ -292,7 +292,9 @@ def make_handler(panel):
                 return {'product': pid, 'resumed': resume}
             m = re.fullmatch(r'/api/setup/(install|login|verify)/(git|node|claude|codex|gemini|copilot)', p)
             if m:
-                return {'install': setup.install, 'login': setup.login, 'verify': setup.verify}[m.group(1)](m.group(2))
+                if m.group(1) == 'verify':
+                    return setup.verify(m.group(2), path=db)
+                return {'install': setup.install, 'login': setup.login}[m.group(1)](m.group(2))
             if p == '/api/board/message':
                 return board.message(str(b.get('text', '')), db, ai=panel.ai)
             m = re.fullmatch(r'/api/board/proposal/(B-[0-9a-f]{9})/(approve|reject)', p)
