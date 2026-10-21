@@ -34,3 +34,12 @@ Hiçbir hesap bilgisi ya da API anahtarı istenmez veya kaydedilmez.
 - Her başlatılan test denemesi, başarısız olsa da, günlük kullanım ve şirket defterine 1 çağrı olarak yazılır. Bu yerel deneme sayısıdır; gerçek sağlayıcı token tüketimi değildir.
 - Yalnızca başarılı çıkış koduyla tam `OK` yanıtı doğrulamadır; hata metnindeki harfler başarı sayılmaz.
 - Gemini giriş dosyasının varlığı tek başına doğrulanmış giriş değildir. Başarılı test kanıtı 15 dakika geçerlidir; eski kayıtlar tekrar doğrulama ister.
+
+## Google AI Pro: Antigravity geçişi (21 Ekim 2026)
+Google bireysel Gemini CLI erişimini 18 Haziran 2026'da Antigravity CLI'a taşıdı.
+- Güncel PARDEX'i indirip eski klasörün yerine yeni sürümü aç. `00_KUR.cmd` veya panelde Google Antigravity CLI → Kur ile resmî Google yükleyicisi çalışır.
+- Paneli kapatıp yeniden aç. Google Antigravity CLI → Giriş yap: `agy` ilk açılışını tamamla ve Google hesabınla tarayıcıda giriş yap. `/quit` ile çıkıp panelde Test et'e bas.
+- API anahtarı gerekmez. PARDEX eski `gemini` programına geri dönmez; yalnızca `agy` bulursa Google çalışanını kurulu sayar. Eski görev/veritabanı sağlayıcı adı Gemini olarak korunur.
+- Eski Gemini test sonucu Antigravity girişini doğrulamaz. `auto/pro/flash/flash-lite` eski CLI takma adları gönderilmez; CLI hesap varsayılanını kullanır. Açık model seçimi için `agy models` çıktısındaki geçerli model kimliği kullanılmalı.
+- Toplu izin atlama bayrağı verilmez. Headless modda onay isteyen araçlar CLI politikasıyla reddedilebilir; native CLI tam OS izolasyonu garantisi değildir. Windows ve gerçek Google hesabıyla uçtan uca üretim bu ortamda doğrulanmadı.
+Kaynaklar: https://antigravity.google/docs/getting-started/?tab=cli ve https://antigravity.google/docs/cli/headless/

@@ -57,8 +57,8 @@ if (-not (Test-Python) -or -not (Test-Cmd 'git') -or ((Get-NodeMajor) -lt 20)) {
 # ---- 2) AI programlari (aboneliklerin) ----
 $clis = @(
   [pscustomobject]@{ Cmd = 'claude'; Pkg = '@anthropic-ai/claude-code'; Name = 'Claude Code (Claude Pro)' },
-  [pscustomobject]@{ Cmd = 'codex';  Pkg = '@openai/codex';             Name = 'Codex CLI (ChatGPT Pro)' },
-  [pscustomobject]@{ Cmd = 'gemini'; Pkg = '@google/gemini-cli';        Name = 'Gemini CLI (Google AI Pro)' }
+  [pscustomobject]@{ Cmd = 'codex';  Pkg = '@openai/codex';             Name = 'Codex CLI (ChatGPT Pro)' }
+
 )
 $missing = @($clis | Where-Object { -not (Test-Cmd $_.Cmd) })
 if ($missing.Count -gt 0) {
@@ -70,6 +70,14 @@ if ($missing.Count -gt 0) {
       & $npm install -g ($c.Pkg + '@latest')
       if ($LASTEXITCODE -ne 0) { Write-Host ('UYARI: ' + $c.Name + ' kurulamadi; paneldeki Kurulum ekranindan tekrar dene.') -ForegroundColor Yellow }
     }
+    Update-SessionPath
+  }
+}
+
+# Google individual subscriptions use Antigravity, not the retired Gemini CLI.
+if (-not (Test-Cmd 'agy')) {
+  if (Confirm-Evet 'Google Antigravity CLI resmi Google kaynagindan kurulacak.') {
+    & (Join-Path $PSScriptRoot 'antigravity-kur.ps1')
     Update-SessionPath
   }
 }

@@ -1,17 +1,20 @@
 ﻿$ErrorActionPreference='Stop'
 Write-Host '=== Ultra Pro - AI CLI Araclari ===' -ForegroundColor Cyan
-Write-Host 'Claude Code, Codex, Gemini ve istege bagli Copilot CLI - resmi npm paketleri.'
+Write-Host 'Claude Code, Codex, Antigravity ve istege bagli Copilot CLI - resmi npm paketleri.'
 Write-Host 'Bu islem mevcut Node.js surumune ve internete ihtiyac duyar.'
 Write-Host 'Hicbir API anahtari kaydedilmez. Abonelik hesabiniza daha sonra kendiniz girersiniz.'
 $npm = Get-Command 'npm.cmd' -ErrorAction SilentlyContinue
 if (-not $npm) {Write-Host 'Node.js/npm bulunamadi. Resmi: https://nodejs.org/en/download' -ForegroundColor Yellow;exit 1}
-$ans=Read-Host 'Uc resmi AI CLI paketini yuklemek veya guncellemek icin EVET yaz'
+$ans=Read-Host 'Claude ve Codex paketlerini yuklemek veya guncellemek icin EVET yaz'
 if ($ans -eq 'EVET') {
-  foreach ($pkg in @('@openai/codex','@google/gemini-cli','@anthropic-ai/claude-code')) {
+  foreach ($pkg in @('@openai/codex','@anthropic-ai/claude-code')) {
     Write-Host "Yukleniyor: $pkg" -ForegroundColor Cyan
     & $npm.Source install -g "$pkg@latest"
     if ($LASTEXITCODE -ne 0) {Write-Host "UYARI: $pkg kurulumu basarisiz. Digerlerine geciliyor." -ForegroundColor Yellow}
   }
+}
+if ((Read-Host 'Google Antigravity CLI kurmak/guncellemek icin EVET yaz') -eq 'EVET') {
+  & (Join-Path $PSScriptRoot 'antigravity-kur.ps1')
 }
 $copilot = Read-Host 'Copilot Pro CLI kurmak/guncellemek icin EVET yaz (istege bagli)'
 if ($copilot -eq 'EVET') {

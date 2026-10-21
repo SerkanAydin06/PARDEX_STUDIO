@@ -969,7 +969,7 @@ class Studio(tk.Tk):
         row=ttk.Frame(p);row.pack(anchor='w')
         self.btn(row,'Claude giriş',lambda:self.terminal(['claude']))
         self.btn(row,'Codex giriş',lambda:self.terminal(['codex','login']))
-        self.btn(row,'Gemini giriş',lambda:self.terminal(['gemini']))
+        self.btn(row,'Gemini giriş',lambda:self.terminal([core.which('gemini') or 'agy']))
         installers=ttk.Frame(p);installers.pack(anchor='w',pady=(8,0))
         self.btn(installers,'Git indir',lambda:webbrowser.open(core.LINKS['Git']))
         self.btn(installers,'GitHub CLI indir',lambda:webbrowser.open(core.LINKS['GitHub CLI']))

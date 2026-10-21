@@ -75,7 +75,7 @@ class SetupStatusTests(unittest.TestCase):
     def test_gemini_never_claims_a_login_it_cannot_see(self):
         out = {('node', '--version'): (0, 'v22.11.0')}
         g = [i for i in self.status({'git', 'node', 'npm', 'gemini'}, out)['items'] if i['key'] == 'gemini'][0]
-        self.assertEqual(g['login'], 'no')  # no auth method chosen: Gemini cannot run at all
+        self.assertEqual(g['login'], 'unknown')  # no auth method chosen: Gemini cannot run at all
         (self.home / '.gemini').mkdir()
         (self.home / '.gemini' / 'settings.json').write_text('{"security":{"auth":{"selectedType":"oauth-personal"}}}')
         s = self.status({'git', 'node', 'npm', 'gemini', 'claude'}, {**out, ('claude', 'auth', 'status'): (0, '{"loggedIn":true}')})
@@ -115,7 +115,7 @@ class SetupActionTests(unittest.TestCase):
         w, _ = fake_env({'npm', 'winget'}, {})
         with w:
             self.assertEqual(setup.install_command('codex')[1:], ['install', '-g', '@openai/codex@latest'])
-            self.assertEqual(setup.install_command('gemini')[-1], '@google/gemini-cli@latest')
+            self.assertIsNone(setup.install_command('gemini'))  # non-Windows: official manual instructions
             with mock.patch.object(setup.os, 'name', 'nt'):
                 self.assertEqual(setup.install_command('git')[1:4], ['install', '--id', 'Git.Git'])
         with self.assertRaises(ValueError):
