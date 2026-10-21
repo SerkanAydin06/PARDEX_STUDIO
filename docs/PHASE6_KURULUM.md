@@ -46,3 +46,7 @@ Kaynaklar: https://antigravity.google/docs/getting-started/?tab=cli ve https://a
 
 ## Godot programı otomatik bulunamıyorsa
 Diğer bölümler → Ayarlar → Godot program dosyasının tam yolu alanına Godot `.exe` dosyasının yolunu yapıştır ve kaydet. Tırnaklı ve boşluk içeren yollar desteklenir. Dosya mevcut olmalı; ayar boş bırakılırsa eski otomatik arama kullanılır. Ayar bir Godot kurulum veya sürüm doğrulaması değildir; gerçek proje testi üretim akışında çalışır. Dosya taşınırsa yol güncellenmelidir.
+
+## Bağlantı kaydı ve çıkış ayrımı
+15 dakika önce başarılı olmuş bağlantı testi, oturumun kapandığı anlamına gelmez. Panel bu kaydı geçmiş başarı olarak gösterir ve otomatik yeni AI testi çalıştırmaz. Gerçek yeniden doğrulama manuel Test et ile yapılır; ağ/kota/çıktı hatası başarılı geçmiş kaydını silmez. Açık oturum hatası veya sahibin Giriş yap işlemi yeniden doğrulama gerektirir.
+Kurulum testleri Kalite departmanına yazılır; eski CEO kayıtları aynı toplam çağrı sayısı korunarak Kalite'ye taşınır. Günlük/haftalık şirket sınırları ve acil durdurma geçerlidir. Bu sayımlar gerçek sağlayıcı kotası değildir.

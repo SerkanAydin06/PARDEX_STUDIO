@@ -205,10 +205,31 @@ class SetupActionTests(unittest.TestCase):
                     self.assertEqual(result['detail'], text)
                     self.assertNotIn('hesabına bağlan', result['message'])
 
-    def test_old_verification_does_not_confirm_login(self):
+    def test_old_verification_is_historical_evidence_not_logout(self):
         core.save_json(core.HOME / 'hq' / 'setup_verified.json',
                        {'copilot': {'ok': True, 'checked_at': 0}})
-        self.assertEqual(setup._copilot_login('unused')[0], 'unknown')
+        self.assertEqual(setup._copilot_login('unused')[0], 'cached')
+
+    def test_connection_test_uses_quality_budget_and_preserves_success(self):
+        setup.store.update_settings({'budgets': {'ceo': 0}})
+        with mock.patch.object(core, 'which', return_value='/fake/agy'):
+            with mock.patch.object(setup, '_run', return_value=(0, 'OK')):
+                self.assertTrue(setup.verify('gemini')['ok'])
+            self.assertEqual(setup.store.calls_used('ceo'), 0)
+            self.assertEqual(setup.store.calls_used('kalite'), 1)
+            with mock.patch.object(setup, '_run', return_value=(1, 'Network unavailable')):
+                self.assertFalse(setup.verify('gemini')['ok'])
+            self.assertEqual(setup._gemini_login('unused')[0], 'yes')
+            with mock.patch.object(setup, '_run', return_value=(1, 'Not signed in')):
+                setup.verify('gemini')
+            self.assertEqual(setup._gemini_login('unused')[0], 'unknown')
+
+    def test_old_setup_calls_are_reclassified_not_deleted(self):
+        setup.store.record('ceo', 'ai_call', 1, 'Gemini', note='Kurulum giriş testi')
+        setup.store.record('ceo', 'ai_call', 1, 'Claude', note='CEO planı')
+        self.assertEqual(setup.store.calls_used('ceo'), 1)
+        self.assertEqual(setup.store.calls_used('kalite'), 1)
+        self.assertEqual(setup.store.calls_used(), 2)
 
     def test_server_routes_are_allow_listed(self):
         import re

@@ -87,6 +87,9 @@ def _conn(path=None):
     CREATE INDEX IF NOT EXISTS jobs_status ON jobs(status);
     CREATE INDEX IF NOT EXISTS ledger_week ON ledger(week, dept, kind);
     ''')
+    # Reclassify old setup checks without deleting usage or changing company totals.
+    db.execute("UPDATE ledger SET dept='kalite' WHERE dept='ceo' AND kind='ai_call' AND note='Kurulum giriş testi'")
+    db.commit()  # Finish migration before callers begin their own atomic transaction.
     cols = {r[1] for r in db.execute('PRAGMA table_info(ideas)')}
     if 'sources' not in cols:
         db.execute('ALTER TABLE ideas ADD COLUMN sources TEXT')
