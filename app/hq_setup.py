@@ -23,8 +23,9 @@ CLIS = {
                'login': ['claude', 'auth', 'login'], 'role': 'Plan sohbeti, iş paylaşımı, zor mimari'},
     'codex': {'name': 'Codex CLI', 'plan': 'ChatGPT Pro', 'npm': '@openai/codex',
               'login': ['codex', 'login'], 'role': 'Kod yazımı ve düzeltme'},
-    'gemini': {'name': 'Gemini CLI', 'plan': 'Google AI Pro', 'npm': '@google/gemini-cli',
-               'login': ['gemini'], 'role': 'Bağımsız kod denetimi ve Ar-Ge'},
+    'gemini': {'name': 'Google Antigravity CLI', 'plan': 'Google AI Pro', 'npm': None,
+               'url': 'https://antigravity.google/docs/getting-started/?tab=cli',
+               'login': ['agy'], 'role': 'Bağımsız kod denetimi ve Ar-Ge'},
     'copilot': {'name': 'GitHub Copilot CLI', 'plan': 'Copilot Pro · isteğe bağlı', 'npm': '@github/copilot',
                 'login': ['copilot', 'login'], 'optional': True,
                 'role': 'Yedek çalışan: kod, inceleme, plan (Ar-Ge yapamaz)'},
@@ -108,20 +109,8 @@ def _gemini_login(_exe, home=None):
     """Gemini CLI has no status command. Without a chosen auth method it cannot run at all (no), only a recent successful "Test et" means yes; a cached
     Google login file is unconfirmed; a chosen method with credentials in the system
     keychain cannot be seen from here (unknown). Never a false 'yes'."""
-    v = _recent_verification('gemini')
-    if v:
-        return v
-    base = Path(home or Path.home()) / '.gemini'
-    if (base / 'oauth_creds.json').is_file():
-        return 'unknown', 'Giriş dosyası var; hesabı doğrulamak için Test et’e bas'
-    try:
-        conf = json.loads((base / 'settings.json').read_text(encoding='utf-8'))
-        selected = ((conf.get('security') or {}).get('auth') or {}).get('selectedType') or conf.get('selectedAuthType')
-    except (OSError, ValueError, AttributeError):
-        selected = None
-    if not selected:
-        return 'no', 'Giriş yapılmamış'
-    return 'unknown', 'Giriş yapılmış görünüyor ama doğrulanamadı; "Test et"e bas'
+    v = _recent_verification('antigravity')
+    return v or ('unknown', 'Antigravity hesabını Giriş yap ile aç, ardından Test et')
 
 
 def _copilot_login(_exe):
@@ -163,8 +152,8 @@ def status(force=False):
         row['optional'] = bool(spec.get('optional'))
         if not exe:
             row['detail'] = 'Kurulu değil' + (' (isteğe bağlı)' if spec.get('optional') else '')
-            row['actions'] = ['install'] if npm else []
-            if not npm:
+            row['actions'] = ['install'] if npm or key == 'gemini' else []
+            if not npm and key != 'gemini':
                 row['detail'] += ' (önce Node.js kur)'
         else:
             row['version'] = _version(_run([exe, '--version'])[1])
@@ -213,6 +202,11 @@ def _next_step(items, usable):
 # ---------------- actions (owner-triggered) ----------------
 def install_command(key):
     """Fixed, allow-listed install command for a tool, or None if it cannot be automated here."""
+    if key == 'gemini':
+        if os.name == 'nt':
+            return ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                    str(core.BASE / 'scripts' / 'antigravity-kur.ps1')]
+        return None
     if key in CLIS:
         npm = core.which('npm')
         return [npm, 'install', '-g', CLIS[key]['npm'] + '@latest'] if npm else None
@@ -227,9 +221,10 @@ def install(key):
         raise ValueError('Bilinmeyen araç')
     cmd = install_command(key)
     if cmd is None:
-        if key in BASE_TOOLS:
-            return {'manual': True, 'url': BASE_TOOLS[key]['url'],
-                    'message': f"{BASE_TOOLS[key]['name']} otomatik kurulamadı (winget yok). İndirme sayfasından kur, "
+        if key in BASE_TOOLS or key == 'gemini':
+            spec = CLIS[key] if key == 'gemini' else BASE_TOOLS[key]
+            return {'manual': True, 'url': spec['url'],
+                    'message': f"{spec['name']} için resmî kurulum sayfasını aç. Kurduktan sonra "
                                'sonra paneli yeniden aç.'}
         raise ValueError('Önce Node.js kurulmalı (npm bulunamadı)')
     with _LOCK:
@@ -243,7 +238,7 @@ def install(key):
                          ended=core.now())
         _CACHE['data'] = None
     threading.Thread(target=work, daemon=True).start()
-    restart = key in BASE_TOOLS
+    restart = key in BASE_TOOLS or key == 'gemini'
     return {'started': key, 'restart_needed': restart,
             'message': ('Kurulum başladı. Bitince paneli kapatıp yeniden aç (yeni program yolu ancak öyle görünür).'
                         if restart else 'Kurulum başladı; birkaç dakika sürebilir.')}
@@ -259,6 +254,8 @@ def login_command(key):
         raise ValueError('Bilinmeyen AI programı')
     if not core.which(key):
         raise ValueError(f"{CLIS[key]['name']} kurulu değil; önce kur")
+    if key == 'gemini':
+        return [core.which('gemini')]
     return list(CLIS[key]['login'])  # bare name: the console resolves it via PATH (no quoting pitfalls)
 
 
@@ -266,13 +263,13 @@ def login(key, opener=None):
     """Open the provider's own sign-in in a visible console window (the owner types nothing into PARDEX)."""
     argv = login_command(key)
     data = _verified()
-    if data.pop(key, None) is not None:  # a new login makes an old "Test et" result stale
+    if data.pop('antigravity' if key == 'gemini' else key, None) is not None:  # a new login makes an old "Test et" result stale
         core.save_json(core.HOME / 'hq' / 'setup_verified.json', data)
     title = f"PARDEX - {CLIS[key]['name']} girisi"
     hint = {'copilot': 'Tarayıcıda GitHub hesabınla (Copilot Pro) giriş yap, sonra bu pencereyi kapat ve "Test et"e bas.',
             'claude': 'Tarayıcıda Claude hesabınla giriş yap, sonra bu pencereyi kapat.',
             'codex': 'Tarayıcıda ChatGPT hesabınla giriş yap, sonra bu pencereyi kapat.',
-            'gemini': '"Login with Google" seç, tarayıcıda giriş yap; açılan sohbette /quit yazıp çık.'}[key]
+            'gemini': 'Antigravity ilk açılışını tamamla, Google hesabınla giriş yap; /quit ile çıkıp Test et’e bas.'}[key]
     if os.name == 'nt':
         cmd = ['cmd.exe', '/c', 'start', title, 'cmd.exe', '/k', *argv]
         (opener or subprocess.Popen)(cmd, env=core.safe_env())
@@ -314,7 +311,7 @@ def _verify(key, path=None):
     code, out = _run(VERIFY[key](exe), 120)
     ok = code == 0 and out.strip() == 'OK'
     data = _verified()
-    data[key] = {'ok': ok, 'at': core.now(), 'checked_at': time.time()}
+    data['antigravity' if key == 'gemini' else key] = {'ok': ok, 'at': core.now(), 'checked_at': time.time()}
     core.save_json(core.HOME / 'hq' / 'setup_verified.json', data)
     _CACHE['data'] = None
     if ok:

@@ -324,7 +324,7 @@
       <ul class="small">${v.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
       ${v.rolled_back ? '' : `<button class="btn btn-link" data-rollback="${v.id}" type="button">Bu değişiklikten öncesine dön</button>`}</div>`).join('') : '<div class="empty">Henüz değişiklik yok.</div>';
     const rq = b.core_requirements;
-    $('#core-req').innerHTML = [['codex', 'Codex CLI'], ['claude', 'Claude Code'], ['gemini', 'Gemini CLI'], ['docker', 'Docker'], ['test_image', 'Test imajı (PARDEX_TEST_IMAGE)']]
+    $('#core-req').innerHTML = [['codex', 'Codex CLI'], ['claude', 'Claude Code'], ['gemini', 'Antigravity CLI (Gemini)'], ['docker', 'Docker'], ['test_image', 'Test imajı (PARDEX_TEST_IMAGE)']]
       .map(([k, l]) => `<span class="chip ${rq[k] ? 'calisiyor' : 'onay'}">${rq[k] ? '✓' : '✗'} ${l}</span>`).join('');
     const cs = b.core_state.running;
     $('#core-list').innerHTML = b.core.map((c) => `<div class="pkg"><div class="pkg-head"><b>${esc(c.goal.slice(0, 90))}</b><span class="chip">${esc(CORESTATE[c.state] || c.state)}</span></div>

@@ -31,7 +31,7 @@ LINKS = {'Git':'https://git-scm.com/downloads/win', 'GitHub CLI':'https://cli.gi
          'Android Studio':'https://developer.android.com/studio',
          'Node.js':'https://nodejs.org/en/download', 'Claude Code':'https://code.claude.com/docs/en/overview',
          'Codex CLI':'https://developers.openai.com/codex/cli',
-         'Gemini CLI':'https://github.com/google-gemini/gemini-cli'}
+         'Gemini CLI':'https://antigravity.google/docs/getting-started/?tab=cli'}
 
 
 def now(): return dt.datetime.now().astimezone().isoformat(timespec='seconds')
@@ -46,11 +46,46 @@ def load_json(path, default=None):
     except (OSError,ValueError): return {} if default is None else default
 
 def which(name):
+    # Keep the stored Gemini provider identity, but use Google's supported consumer CLI.
+    if name == 'gemini':
+        name = 'agy'
     names = [name+'.cmd',name+'.exe',name] if os.name=='nt' else [name]
     for item in names:
         found = shutil.which(item)
         if found: return found
+    if name == 'agy':
+        folder = Path(os.getenv('LOCALAPPDATA', str(Path.home() / 'AppData' / 'Local'))) / 'agy' / 'bin' if os.name == 'nt' else Path.home() / '.local' / 'bin'
+        candidate = folder / ('agy.exe' if os.name == 'nt' else 'agy')
+        if candidate.is_file():
+            return str(candidate)
     return None
+
+def google_command(exe, prompt=None, model='', output='text'):
+    # Old Gemini aliases are not valid Antigravity model slugs. Use account default.
+    cmd = [exe]
+    if model and model not in ('auto', 'pro', 'flash', 'flash-lite', 'cli-varsayilan'):
+        cmd += ['--model', model]
+    if prompt is not None:
+        cmd += ['--prompt', prompt, '--output-format', output]
+    return cmd
+
+def normalize_google_args(argv, input_data=None):
+    name = argv[0].replace('\\', '/').rsplit('/', 1)[-1].lower()
+    if name not in ('agy', 'agy.exe', 'agy.cmd'):
+        return argv, input_data
+    out = [argv[0]]
+    i = 1
+    while i < len(argv):
+        if argv[i] == '--model' and i + 1 < len(argv) and argv[i+1] in ('auto', 'pro', 'flash', 'flash-lite'):
+            i += 2
+        elif argv[i] == '--approval-mode':
+            raise ValueError('Eski Gemini izin bayrağı Antigravity ile kullanılamaz')
+        else:
+            out.append(argv[i]); i += 1
+    if input_data is not None and not any(a in out for a in ('--prompt', '-p', '--print')):
+        out += ['--prompt', input_data]
+        input_data = None
+    return out, input_data
 
 def find_godot():
     found = which('godot') or which('godot4')
@@ -190,7 +225,7 @@ def run(args,cwd,timeout=60,input_data=None,env=None,*,cancel_check=None):
     The standard path stays unchanged for existing callers. Cancellable calls
     use a dedicated process group, so a spawned CLI worker is also stopped.
     """
-    argv = [str(a) for a in args]
+    argv, input_data = normalize_google_args([str(a) for a in args], input_data)
     try:
         if cancel_check is None:
             r=subprocess.run(argv,cwd=str(cwd),input=input_data,stdout=subprocess.PIPE,
@@ -266,7 +301,7 @@ def safe_env():
     env=os.environ.copy()
     # Avoid accidental switch to pay-as-you-go API auth. CLI should use account login.
     for key in ('ANTHROPIC_API_KEY','OPENAI_API_KEY','CODEX_API_KEY','GEMINI_API_KEY',
-                'GOOGLE_API_KEY','GOOGLE_APPLICATION_CREDENTIALS','GOOGLE_GENAI_USE_VERTEXAI'):
+                'GOOGLE_API_KEY','GOOGLE_APPLICATION_CREDENTIALS','GOOGLE_GENAI_USE_VERTEXAI','AGY_ADC_AUTH'):
         env.pop(key,None)
     return env
 

@@ -17,16 +17,16 @@ import hq_store as store
 
 # role -> ordered candidates (provider, model alias, effort). First installed one wins.
 ROLES = {
-    'plan_chat': (('Claude', 'sonnet', 'low'), ('Gemini', 'pro', ''), ('Codex', '', 'low'), ('Copilot', '', '')),
-    'breakdown': (('Claude', 'sonnet', 'medium'), ('Gemini', 'pro', ''), ('Codex', '', 'medium'), ('Copilot', '', '')),
-    'architect': (('Claude', 'opus', 'medium'), ('Gemini', 'pro', ''), ('Codex', '', 'high'), ('Copilot', '', '')),
-    'implement': (('Codex', '', 'medium'), ('Claude', 'sonnet', 'medium'), ('Gemini', 'pro', ''), ('Copilot', '', '')),
-    'fix': (('Codex', '', 'high'), ('Claude', 'sonnet', 'high'), ('Gemini', 'pro', ''), ('Copilot', '', '')),
-    'fix_strong': (('Claude', 'opus', 'high'), ('Codex', '', 'high'), ('Gemini', 'pro', ''), ('Copilot', '', '')),
-    'review': (('Gemini', 'flash', ''), ('Claude', 'haiku', 'low'), ('Codex', '', 'low'), ('Copilot', '', '')),
+    'plan_chat': (('Claude', 'sonnet', 'low'), ('Gemini', '', ''), ('Codex', '', 'low'), ('Copilot', '', '')),
+    'breakdown': (('Claude', 'sonnet', 'medium'), ('Gemini', '', ''), ('Codex', '', 'medium'), ('Copilot', '', '')),
+    'architect': (('Claude', 'opus', 'medium'), ('Gemini', '', ''), ('Codex', '', 'high'), ('Copilot', '', '')),
+    'implement': (('Codex', '', 'medium'), ('Claude', 'sonnet', 'medium'), ('Gemini', '', ''), ('Copilot', '', '')),
+    'fix': (('Codex', '', 'high'), ('Claude', 'sonnet', 'high'), ('Gemini', '', ''), ('Copilot', '', '')),
+    'fix_strong': (('Claude', 'opus', 'high'), ('Codex', '', 'high'), ('Gemini', '', ''), ('Copilot', '', '')),
+    'review': (('Gemini', '', ''), ('Claude', 'haiku', 'low'), ('Codex', '', 'low'), ('Copilot', '', '')),
     # Copilot receives no URL tools, so it cannot act as the research worker.
-    'research': (('Gemini', 'pro', ''), ('Claude', 'sonnet', 'medium')),
-    'text': (('Claude', 'haiku', 'low'), ('Gemini', 'flash-lite', ''), ('Codex', '', 'low'), ('Copilot', '', '')),
+    'research': (('Gemini', '', ''), ('Claude', 'sonnet', 'medium')),
+    'text': (('Claude', 'haiku', 'low'), ('Gemini', '', ''), ('Codex', '', 'low'), ('Copilot', '', '')),
 }
 
 ROLE_LABELS = {
@@ -125,10 +125,8 @@ def build_cmd(provider, exe, model, effort, mode):
         if effort:
             cmd += ['-c', 'model_reasoning_effort=' + effort]
         return cmd + ['-']
-    cmd = [exe, '--model', model or 'auto']
-    if mode == 'write':
-        cmd += ['--approval-mode', 'auto_edit']
-    return cmd
+    return core.google_command(exe, model=model)
+
 
 
 def call(role, prompt, cwd, dept, *, avoid=(), timeout=900, path=None, runner=None, have=None, job_id='', cancel_check=None):

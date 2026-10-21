@@ -4,7 +4,7 @@ Yapay zekâların departmanlar hâlinde çalıştığı yerel yazılım şirketi
 
 ## Başlangıç (Windows)
 
-1. **`00_KUR.cmd`** dosyasına çift tıkla. Eksik olanları (Python, Git, Node.js, Claude Code, Codex, Gemini CLI) bulur, onayınla resmî kaynaklardan kurar ve şirket panelini açar.
+1. **`00_KUR.cmd`** dosyasına çift tıkla. Eksik olanları (Python, Git, Node.js, Claude Code, Codex, Antigravity CLI (Gemini)) bulur, onayınla resmî kaynaklardan kurar ve şirket panelini açar.
 2. Panel ilk açılışta **Kurulum** ekranını gösterir. Her AI için **Giriş yap**'a bas ve kendi hesabınla giriş yap (Claude Pro, ChatGPT Pro, Google AI Pro). Bağımsız kod denetimi için **en az iki farklı AI** gerekir.
 3. Hepsi yeşil olunca **Projeler → Yeni proje**: Ürün Müdürüyle ana hatları konuş, "Bunu yap" de.
 
