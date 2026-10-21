@@ -38,6 +38,7 @@ Bu dosya Codex, Claude Code, Gemini CLI ve diğer kod asistanları için **depo 
 - `.github/workflows`: yalnızca bu çekirdeğin otomasyonları
 - `app/hq_store.py`, `app/hq_ceo.py`, `app/hq_workers.py`, `app/hq_server.py`, `app/hq_static/`: Aşama 3 Şirket Merkezi (yerel web paneli). Her iş önerilir; patron onaylamadan çalışmaz.
 - `app/hq_projects.py`, `app/hq_router.py`, `app/hq_research.py`: Aşama 4 Proje Hattı. Ürün kodu ASLA bu depoya yazılmaz; ürünler `projects_root` altında kendi git deposundadır. Model sürüm numarası sabitlenmez, takma ad kullanılır.
+- `app/hq_setup.py`, `00_KUR.cmd`, `scripts/pardex-kur.ps1`: Aşama 6 kurulum. Durum kontrolleri 0 token; kurulum komutları sabit ve izin listeli; girişler programların kendi resmî akışıyla yapılır, kimlik bilgisi saklanmaz.
 - `app/hq_org.py`, `app/hq_board.py`: Aşama 5 Yönetim Kurulu. Departmanlar ve iş akışı veridir; değişiklikler yalnızca doğrulanmış işlemlerle, patron onayıyla ve sürümlenerek yapılır. Çekirdek departmanlar kapatılamaz.
 
 Öncelik listesi `docs/ROADMAP.md` içindedir. Henüz gerçekleşmemiş yeteneği tamamlandı diye yazma.
