@@ -822,7 +822,7 @@ def review_capacity(path=None, have=None):
     need = 1 + _wf(path)['reviews']
     if len(have) >= need:
         return ''
-    kur = [x for x in ('Codex', 'Gemini', 'Claude') if x not in have]
+    kur = [x for x in ('Codex', 'Gemini', 'Claude', 'Copilot') if x not in have]
     eksik = need - len(have)
     secim = ' veya '.join(kur) if eksik == 1 else ', '.join(kur)
     return (f"Bağımsız kontrol için en az {need} farklı AI gerekiyor; kurulu: {', '.join(have) or 'yok'}. "

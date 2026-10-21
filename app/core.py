@@ -67,7 +67,7 @@ def find_godot():
 def tool_status():
     return {'Python':sys.executable, 'Git':which('git'), 'GitHub CLI':which('gh'),
             'Node.js':which('node'), 'Claude Code':which('claude'),
-            'Codex CLI':which('codex'), 'Gemini CLI':which('gemini'),
+            'Codex CLI':which('codex'), 'Gemini CLI':which('gemini'), 'Copilot CLI':which('copilot'),
             'Godot':find_godot(), 'Flutter':which('flutter'), 'Android SDK (adb)':which('adb'),
             'Android SDK (gradle)':which('gradle')}
 

@@ -349,10 +349,10 @@
 
   /* ---------- routing ---------- */
   function renderRouting(r) {
-    $('#routing-installed').textContent = 'Kurulu araçlar: ' + (r.installed.length ? r.installed.join(', ') : 'yok — Claude Code / Codex / Gemini CLI kur ve giriş yap') + '. Sürüm numarası yazılmaz; takma adlar (sonnet, opus, haiku, flash, pro) aboneliğindeki en güncel modele gider.';
+    $('#routing-installed').textContent = 'Kurulu araçlar: ' + (r.installed.length ? r.installed.join(', ') : 'yok — Claude / Codex / Gemini / Copilot CLI kur ve giriş yap') + '. Sürüm numarası yazılmaz; takma adlar (sonnet, opus, haiku, flash, pro) aboneliğindeki en güncel modele gider.';
     const ov = (META && META.settings.routing) || {};
     $('#routing-body').innerHTML = r.rows.map((x) => { const o = ov[x.role] || {}; return `<tr data-route="${x.role}"><td>${esc(x.label)}</td><td>${esc(x.provider)} ${esc(x.model)} ${esc(x.effort)}<div class="small muted">${esc(x.reason)}</div></td>
-      <td><select class="r-prov" aria-label="Sağlayıcı"><option value="">Otomatik</option>${['Claude', 'Codex', 'Gemini'].map((p) => `<option${o.provider === p ? ' selected' : ''}>${p}</option>`).join('')}</select></td>
+      <td><select class="r-prov" aria-label="Sağlayıcı"><option value="">Otomatik</option>${['Claude', 'Codex', 'Gemini', 'Copilot'].map((p) => `<option${o.provider === p ? ' selected' : ''}>${p}</option>`).join('')}</select></td>
       <td><input class="r-model" aria-label="Model" value="${esc(o.model || '')}" placeholder="sonnet / pro…"></td>
       <td><select class="r-eff" aria-label="Effort">${['', 'low', 'medium', 'high'].map((e) => `<option value="${e}"${(o.effort || '') === e ? ' selected' : ''}>${e || '-'}</option>`).join('')}</select></td></tr>`; }).join('');
   }
