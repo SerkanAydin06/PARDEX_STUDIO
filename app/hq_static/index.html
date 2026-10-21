@@ -24,6 +24,7 @@
   </div>
   <nav class="wrap tabs" aria-label="Bölümler">
     <button class="tab active" data-view="office" type="button">Ofis</button>
+    <button class="tab" data-view="setup" type="button">Kurulum <span id="setup-badge" class="badge" hidden>!</span></button>
     <button class="tab" data-view="projects" type="button">Projeler</button>
     <button class="tab" data-view="jobs" type="button">İşler</button>
     <button class="btn btn-ghost-dark" id="advanced-toggle" type="button" aria-expanded="false">Diğer bölümler</button>
@@ -86,6 +87,16 @@
     <h2 class="section-title">Üretim Hattı: fikirden gelire</h2>
     <div class="scroll-x"><div id="pipeline" class="pipeline"></div></div>
     </details>
+  </section>
+
+  <!-- KURULUM -->
+  <section id="view-setup" class="view" hidden>
+    <div class="card">
+      <div class="card-head"><h2>Kurulum</h2><button id="setup-refresh" class="btn btn-line" type="button">Yeniden kontrol et</button></div>
+      <div id="setup-summary" class="setup-summary"></div>
+      <div id="setup-list" class="stack"></div>
+      <p class="muted small">Kontroller hiçbir AI'a mesaj göndermez, kota harcamaz. Giriş bilgilerin PARDEX'e girilmez; her program kendi resmî giriş sayfasını açar.</p>
+    </div>
   </section>
 
   <!-- PROJELER -->

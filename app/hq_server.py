@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hq_board as board  # noqa: E402
 import hq_ceo  # noqa: E402
+import hq_setup as setup  # noqa: E402
 import hq_org as org  # noqa: E402
 import hq_projects as projects  # noqa: E402
 import hq_research as research  # noqa: E402
@@ -198,6 +199,7 @@ def make_handler(panel):
                     '/api/events': lambda: store.events(path=panel.db),
                     '/api/goals': lambda: store.goals(path=panel.db),
                     '/api/settings': panel.settings_view,
+                    '/api/setup': lambda: setup.status(force='force=1' in self.path),
                 }
                 m = re.fullmatch(r'/api/product/(P-[0-9a-f]{9})', p)
                 if m:
@@ -288,6 +290,9 @@ def make_handler(panel):
                 if resume:
                     panel.produce_async(pid)
                 return {'product': pid, 'resumed': resume}
+            m = re.fullmatch(r'/api/setup/(install|login|verify)/(git|node|claude|codex|gemini|copilot)', p)
+            if m:
+                return {'install': setup.install, 'login': setup.login, 'verify': setup.verify}[m.group(1)](m.group(2))
             if p == '/api/board/message':
                 return board.message(str(b.get('text', '')), db, ai=panel.ai)
             m = re.fullmatch(r'/api/board/proposal/(B-[0-9a-f]{9})/(approve|reject)', p)

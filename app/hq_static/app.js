@@ -347,6 +347,39 @@
     $('#dept-dialog').showModal();
   }
 
+
+  /* ---------- Kurulum ---------- */
+  let SETUP = null;
+  function renderSetup(s) {
+    SETUP = s;
+    $('#setup-badge').hidden = s.ready;
+    const done = s.items.filter((i) => i.ok).length;
+    $('#setup-summary').innerHTML = `<div class="setup-head ${s.ready ? 'ok' : 'todo'}">
+        <b>${s.ready ? 'Şirket çalışmaya hazır' : 'Kurulum tamamlanmadı'}</b> · ${done}/${s.items.length} hazır · çalışabilir AI: ${s.usable_ai}</div>
+      <div class="setup-next">Sıradaki adım: ${esc(s.next)}</div>
+      ${s.ready ? '<div class="row"><button class="btn btn-teal" type="button" data-goto="projects">İlk projeni başlat</button></div>' : ''}`;
+    $('#setup-list').innerHTML = s.items.map((i) => {
+      const job = s.jobs[i.key];
+      const chip = i.ok ? ['calisiyor', 'Hazır'] : (i.installed && i.login === 'unknown' ? ['onay', 'Kontrol et'] : ['onay', 'Eksik']);
+      const btn = (a) => ({
+        install: `<button class="btn btn-teal" type="button" data-setup="install" data-tool="${i.key}">Kur</button>`,
+        update: `<button class="btn btn-link" type="button" data-setup="install" data-tool="${i.key}">Güncelle</button>`,
+        login: `<button class="btn btn-dark" type="button" data-setup="login" data-tool="${i.key}">Giriş yap</button>`,
+        verify: `<button class="btn btn-teal" type="button" data-setup="verify" data-tool="${i.key}">Test et</button>`,
+      })[a] || '';
+      return `<div class="setup-row"><div class="job-main">
+          <div class="pkg-head"><b>${esc(i.name)}${i.plan ? ` <span class="muted small">· ${esc(i.plan)}</span>` : ''}</b><span class="chip ${chip[0]}">${chip[1]}</span></div>
+          <div class="small muted">${esc(i.why || '')}${i.version ? ' · sürüm ' + esc(i.version) : ''}</div>
+          <div class="small">${esc(i.detail || '')}</div>
+          ${job ? `<div class="small muted">Kurulum: ${job.state === 'running' ? 'sürüyor…' : (job.state === 'ok' ? 'tamamlandı' : 'başarısız')} ${job.state === 'failed' ? esc(job.tail) : ''}</div>` : ''}
+        </div><div class="job-actions">${(i.actions || []).map(btn).join('')}</div></div>`;
+    }).join('');
+    if (Object.values(s.jobs).some((j) => j.state === 'running')) setTimeout(() => { if (VIEW === 'setup') loadSetup(true); }, 4000);
+  }
+  async function loadSetup(force) {
+    try { renderSetup(await api('/api/setup' + (force ? '?force=1' : ''))); } catch (e) { toast(e.message, true); }
+  }
+
   /* ---------- routing ---------- */
   function renderRouting(r) {
     $('#routing-installed').textContent = 'Kurulu araçlar: ' + (r.installed.length ? r.installed.join(', ') : 'yok — Claude / Codex / Gemini / Copilot CLI kur ve giriş yap') + '. Sürüm numarası yazılmaz; takma adlar (sonnet, opus, haiku, flash, pro) aboneliğindeki en güncel modele gider.';
@@ -368,6 +401,7 @@
     if (VIEW === 'depts') renderDepts(DASH);
     if (VIEW === 'finance') renderFinance(DASH, await api('/api/ledger'));
     if (VIEW === 'board') renderBoard(await api('/api/board'), await api('/api/org'));
+    if (VIEW === 'setup') renderSetup(await api('/api/setup'));
     if (VIEW === 'settings') { META = await api('/api/settings'); renderSettings(META, await api('/api/events')); renderRouting(await api('/api/routing')); }
     if (!DASH.run.running && !DASH.production.running && poll) { clearInterval(poll); poll = null; }
   }
@@ -544,7 +578,23 @@
       .then(() => { META = null; });
   });
 
+  $('#setup-refresh').addEventListener('click', () => loadSetup(true));
+  $('#view-setup').addEventListener('click', async (e) => {
+    const g = e.target.closest('[data-goto]'); if (g) return show(g.dataset.goto);
+    const b = e.target.closest('[data-setup]'); if (!b) return;
+    const tool = b.dataset.tool, act = b.dataset.setup;
+    if (act === 'install' && !confirm('Kurulum resmî paket kaynağından yapılacak. Devam?')) return;
+    if (act === 'verify' && !confirm('Giriş testi: giriş yoksa hiç kota harcanmaz; varsa 1 çok küçük çağrı yapılır. Devam?')) return;
+    b.disabled = true;
+    try {
+      const r = await api(`/api/setup/${act}/${tool}`, {});
+      if (r.manual && r.url) window.open(r.url, '_blank', 'noopener');
+      toast(r.message || 'Başladı');
+    } catch (err) { toast(err.message, true); }
+    loadSetup(true);
+  });
   score();
   refresh().catch((e) => toast(e.message, true));
+  api('/api/setup').then((s) => { renderSetup(s); if (!s.ready) show('setup'); }).catch(() => {});
   setInterval(() => { if (!poll) refresh().catch(() => {}); }, 20000);
 })();
