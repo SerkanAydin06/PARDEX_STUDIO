@@ -148,7 +148,8 @@ class Checks(unittest.TestCase):
             (root / 'app/hq_server.py').write_text(script, encoding='utf-8')
             plan = {'root': str(root), 'job': str(job), 'nonce': 'real-panel-test',
                     'python': sys.executable, 'port': port}
-            child = supervisor.start(plan)
+            with mock.patch.dict(os.environ, {'PYTHONIOENCODING': 'cp1252'}):
+                child = supervisor.start(plan)
             try:
                 self.assertTrue(supervisor.healthy(plan, child, timeout=20),
                                 (job / 'panel.log').read_text(encoding='utf-8', errors='replace'))

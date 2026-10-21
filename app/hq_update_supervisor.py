@@ -91,6 +91,7 @@ def restore_databases(backups):
 
 def start(plan, health=True):
     env = os.environ.copy()
+    env.update(PYTHONIOENCODING='utf-8:backslashreplace', PYTHONUTF8='1')
     env['PYTHONPYCACHEPREFIX'] = str(Path(plan['job']) / ('pycache-new' if health else 'pycache-old'))
     env.pop('PARDEX_UPDATE_HEALTH', None)
     env.pop('PARDEX_UPDATE_NONCE', None)
