@@ -38,6 +38,7 @@ def remove(pid, confirmation, files=False, path=None, queue_path=None):
     if files and p['folder']:
         original = Path(p['folder']).expanduser().absolute()
         _plain(original)
+        original = original.resolve()
         root = Path(store.settings(path)['projects_root']).expanduser().resolve()
         marker = original / '.studio' / projects.MARKER
         _plain(marker)

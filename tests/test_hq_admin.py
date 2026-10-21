@@ -101,7 +101,7 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(projects.products(self.db), [])
         self.assertTrue(self.folder.exists())
         self.assertEqual(core.usage_count(), 1)
-        self.assertEqual(store.settings(self.db)['godot_path'], str(self.godot))
+        self.assertEqual(store.settings(self.db)['godot_path'], str(self.godot.resolve()))
         self.assertTrue(store.settings(self.db)['paused'])
         with closing(sqlite3.connect(Path(result['backup']) / 'company.sqlite3')) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM products').fetchone()[0], 1)
