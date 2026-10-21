@@ -366,15 +366,15 @@
       const btn = (a) => ({
         install: `<button class="btn btn-teal" type="button" data-setup="install" data-tool="${i.key}">Kur</button>`,
         update: `<button class="btn btn-link" type="button" data-setup="install" data-tool="${i.key}">Güncelle</button>`,
-        login: `<button class="btn btn-dark" type="button" data-setup="login" data-tool="${i.key}">Giriş yap</button>`,
-        verify: `<button class="btn btn-teal" type="button" data-setup="verify" data-tool="${i.key}">Test et</button>`,
+        login: `<button class="btn btn-dark" type="button" data-setup="login" data-tool="${i.key}">${i.ok ? 'Hesap girişi / değiştir' : 'Giriş yap'}</button>`,
+        verify: `<button class="btn btn-teal" type="button" data-setup="verify" data-tool="${i.key}">${i.ok ? 'Bağlantıyı yeniden test et' : 'Test et'}</button>`,
       })[a] || '';
       return `<div class="setup-row"><div class="job-main">
           <div class="pkg-head"><b>${esc(i.name)}${i.plan ? ` <span class="muted small">· ${esc(i.plan)}</span>` : ''}</b><span class="chip ${chip[0]}">${chip[1]}</span></div>
           <div class="small muted">${esc(i.why || '')}${i.version ? ' · sürüm ' + esc(i.version) : ''}</div>
           <div class="small">${esc(i.detail || '')}</div>
           ${job ? `<div class="small muted">Kurulum: ${job.state === 'running' ? 'sürüyor…' : (job.state === 'ok' ? 'tamamlandı' : 'başarısız')} ${job.state === 'failed' ? esc(job.tail) : ''}</div>` : ''}
-        </div><div class="job-actions">${(i.actions || []).map(btn).join('')}</div></div>`;
+        </div><div class="job-actions">${i.login === 'cached' ? `<details><summary>İsteğe bağlı işlemler</summary><div class="row">${(i.actions || []).map(btn).join('')}</div></details>` : (i.actions || []).map(btn).join('')}</div></div>`;
     }).join('');
     if (Object.values(s.jobs).some((j) => j.state === 'running')) setTimeout(() => { if (VIEW === 'setup') loadSetup(true); }, 4000);
   }
