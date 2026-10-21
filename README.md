@@ -4,10 +4,11 @@ Yapay zekâların departmanlar hâlinde çalıştığı yerel yazılım şirketi
 
 ## Başlangıç (Windows)
 
-1. Python 3.10+ ve [Git](https://git-scm.com/downloads/win) kur.
-2. `02_AI_CLI_KUR.cmd` ile Claude Code, Codex CLI ve Gemini CLI'ı kur; isteğe bağlı **GitHub Copilot CLI** da aynı yerden kurulabilir. Her birine kendi hesabınla giriş yap. Bağımsız kod kontrolü için **en az iki farklı AI sağlayıcısı** gerekir.
-3. `09_SIRKET_PANELI.cmd` dosyasına çift tıkla. Tarayıcıda **Patron Ofisi** açılır.
-4. **Projeler → Yeni proje**: Ürün Müdürüyle ana hatları konuş, "Bunu yap" de.
+1. **`00_KUR.cmd`** dosyasına çift tıkla. Eksik olanları (Python, Git, Node.js, Claude Code, Codex, Gemini CLI) bulur, onayınla resmî kaynaklardan kurar ve şirket panelini açar.
+2. Panel ilk açılışta **Kurulum** ekranını gösterir. Her AI için **Giriş yap**'a bas ve kendi hesabınla giriş yap (Claude Pro, ChatGPT Pro, Google AI Pro). Bağımsız kod denetimi için **en az iki farklı AI** gerekir.
+3. Hepsi yeşil olunca **Projeler → Yeni proje**: Ürün Müdürüyle ana hatları konuş, "Bunu yap" de.
+
+Sonraki açılışlarda yalnızca `09_SIRKET_PANELI.cmd` yeterli.
 
 Ürünler bu deponun dışında, kendi klasörlerinde ve kendi git depolarında tutulur. Sistem hesap açmaz, ödeme yapmaz, yayın yapmaz.
 

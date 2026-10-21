@@ -167,3 +167,10 @@ input[type=range]{accent-color:var(--teal)}
 .check{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px;margin-top:12px}
 .check input{width:auto;min-height:0}
 #gmy-form textarea{flex:1 1 300px}
+
+/* Phase 6 — Kurulum */
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:9px;background:var(--amber);color:#fff;font-size:11px;margin-left:4px}
+.setup-head{padding:12px 14px;border-radius:12px;font-size:15px}
+.setup-head.ok{background:var(--teal-l);color:var(--teal-d)}.setup-head.todo{background:var(--amber-l);color:#7A470E}
+.setup-next{font-size:15px;margin-top:6px}
+.setup-row{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:#fff}
