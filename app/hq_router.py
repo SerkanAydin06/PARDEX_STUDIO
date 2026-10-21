@@ -17,16 +17,18 @@ import hq_store as store
 
 # role -> ordered candidates (provider, model alias, effort). First installed one wins.
 ROLES = {
-    'plan_chat': (('Claude', 'sonnet', 'low'), ('Gemini', 'pro', ''), ('Codex', '', 'low')),
-    'breakdown': (('Claude', 'sonnet', 'medium'), ('Gemini', 'pro', ''), ('Codex', '', 'medium')),
-    'architect': (('Claude', 'opus', 'medium'), ('Gemini', 'pro', ''), ('Codex', '', 'high')),
-    'implement': (('Codex', '', 'medium'), ('Claude', 'sonnet', 'medium'), ('Gemini', 'pro', '')),
-    'fix':       (('Codex', '', 'high'), ('Claude', 'sonnet', 'high'), ('Gemini', 'pro', '')),
-    'fix_strong': (('Claude', 'opus', 'high'), ('Codex', '', 'high'), ('Gemini', 'pro', '')),
-    'review':    (('Gemini', 'flash', ''), ('Claude', 'haiku', 'low'), ('Codex', '', 'low')),
-    'research':  (('Gemini', 'pro', ''), ('Claude', 'sonnet', 'medium')),
-    'text':      (('Claude', 'haiku', 'low'), ('Gemini', 'flash-lite', ''), ('Codex', '', 'low')),
+    'plan_chat': (('Claude', 'sonnet', 'low'), ('Gemini', 'pro', ''), ('Codex', '', 'low'), ('Copilot', '', '')),
+    'breakdown': (('Claude', 'sonnet', 'medium'), ('Gemini', 'pro', ''), ('Codex', '', 'medium'), ('Copilot', '', '')),
+    'architect': (('Claude', 'opus', 'medium'), ('Gemini', 'pro', ''), ('Codex', '', 'high'), ('Copilot', '', '')),
+    'implement': (('Codex', '', 'medium'), ('Claude', 'sonnet', 'medium'), ('Gemini', 'pro', ''), ('Copilot', '', '')),
+    'fix': (('Codex', '', 'high'), ('Claude', 'sonnet', 'high'), ('Gemini', 'pro', ''), ('Copilot', '', '')),
+    'fix_strong': (('Claude', 'opus', 'high'), ('Codex', '', 'high'), ('Gemini', 'pro', ''), ('Copilot', '', '')),
+    'review': (('Gemini', 'flash', ''), ('Claude', 'haiku', 'low'), ('Codex', '', 'low'), ('Copilot', '', '')),
+    # Copilot receives no URL tools, so it cannot act as the research worker.
+    'research': (('Gemini', 'pro', ''), ('Claude', 'sonnet', 'medium')),
+    'text': (('Claude', 'haiku', 'low'), ('Gemini', 'flash-lite', ''), ('Codex', '', 'low'), ('Copilot', '', '')),
 }
+
 ROLE_LABELS = {
     'plan_chat': 'Plan sohbeti (Ürün Müdürü)', 'breakdown': 'İş paylaşımı (CEO)',
     'architect': 'Zor mimari (yalnızca yüksek karmaşıklık)', 'implement': 'Kod yazımı',
@@ -35,7 +37,7 @@ ROLE_LABELS = {
 }
 # What a role may touch: write = edit files in the product folder only; web = search/fetch only.
 MODES = {'implement': 'write', 'fix': 'write', 'fix_strong': 'write', 'research': 'web'}
-BINARIES = {'Claude': 'claude', 'Codex': 'codex', 'Gemini': 'gemini'}
+BINARIES = {'Claude': 'claude', 'Codex': 'codex', 'Gemini': 'gemini', 'Copilot': 'copilot'}
 
 
 def installed():
@@ -75,7 +77,7 @@ def choose(role, avoid=(), path=None, have=None):
             raise RuntimeError('Bağımsız kalite denetçisi yok; farklı bir AI sağlayıcısı kurulmalı')
         cands = [c for c in ROLES[role] if c[0] in have]
         if not cands:
-            raise RuntimeError('Kullanılabilir AI CLI yok (Claude Code, Codex veya Gemini CLI kur ve giriş yap)')
+            raise RuntimeError('Kullanılabilir AI CLI yok (Claude, Codex, Gemini veya Copilot CLI kur ve giriş yap)')
         if avoid:
             first = cands[0]
             return first[0], first[1], first[2], 'Farklı sağlayıcı kurulu değil; bağımsızlık sınırlı'
@@ -102,6 +104,17 @@ def build_cmd(provider, exe, model, effort, mode):
             cmd += ['--permission-mode', 'dontAsk', '--allowedTools', 'WebSearch,WebFetch']
         else:
             cmd += ['--permission-mode', 'dontAsk', '--allowedTools', 'Read,Glob,Grep']
+        return cmd
+    if provider == 'Copilot':
+        # Copilot supports piped prompts via stdin. Never include -p (ignores stdin).
+        # Restrict to file tools: no shell, URL, subagents, skills or MCP access.
+        tools = ('view,glob,grep,edit,create,apply_patch' if mode == 'write'
+                 else 'view,glob,grep')
+        cmd = [exe, '--silent', '--no-ask-user', '--available-tools=' + tools,
+               '--allow-tool=' + ('read,write' if mode == 'write' else 'read'),
+               '--deny-tool=shell,url,memory']
+        if model:
+            cmd += ['--model', model]  # otherwise use the signed-in account's default
         return cmd
     if provider == 'Codex':
         cmd = [exe, 'exec', '--sandbox', 'workspace-write' if mode == 'write' else 'read-only']
@@ -130,7 +143,14 @@ def call(role, prompt, cwd, dept, *, avoid=(), timeout=900, path=None, runner=No
     store.record(dept, 'ai_call', 1, provider, job_id=job_id, note=f'{role} · {model or "varsayılan"} {effort}'.strip(), path=path)
     t0 = time.monotonic()
     run = runner or core.run
-    call_kw = {'timeout': timeout, 'input_data': prompt, 'env': core.safe_env()}
+    env = core.safe_env()
+    if provider == 'Copilot':
+        # Avoid accidental PAT/BYOK precedence over the owner's Copilot Pro login.
+        for key in ('COPILOT_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN',
+                    'COPILOT_PROVIDER_API_KEY', 'COPILOT_PROVIDER_BASE_URL',
+                    'COPILOT_OFFLINE'):
+            env.pop(key, None)
+    call_kw = {'timeout': timeout, 'input_data': prompt, 'env': env}
     if cancel_check is not None and runner is None:
         call_kw['cancel_check'] = cancel_check
     r = run(cmd, Path(cwd), **call_kw)

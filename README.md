@@ -5,7 +5,7 @@ Yapay zekâların departmanlar hâlinde çalıştığı yerel yazılım şirketi
 ## Başlangıç (Windows)
 
 1. Python 3.10+ ve [Git](https://git-scm.com/downloads/win) kur.
-2. `02_AI_CLI_KUR.cmd` ile Claude Code, Codex CLI ve Gemini CLI'ı kur; her birine kendi hesabınla giriş yap. Bağımsız kod kontrolü için **en az iki farklı AI** gerekir.
+2. `02_AI_CLI_KUR.cmd` ile Claude Code, Codex CLI ve Gemini CLI'ı kur; isteğe bağlı **GitHub Copilot CLI** da aynı yerden kurulabilir. Her birine kendi hesabınla giriş yap. Bağımsız kod kontrolü için **en az iki farklı AI sağlayıcısı** gerekir.
 3. `09_SIRKET_PANELI.cmd` dosyasına çift tıkla. Tarayıcıda **Patron Ofisi** açılır.
 4. **Projeler → Yeni proje**: Ürün Müdürüyle ana hatları konuş, "Bunu yap" de.
 
@@ -13,7 +13,7 @@ Yapay zekâların departmanlar hâlinde çalıştığı yerel yazılım şirketi
 
 ## Belgeler
 
-- [Proje Hattı ve model seçimi](docs/PHASE4_PROJE_HATTI.md)
+- [Proje Hattı ve model seçimi](docs/PHASE4_PROJE_HATTI.md) · [GitHub Copilot Pro desteği](docs/HQ_COPILOT_CLI.md)
 - [Yönetim Kurulu: şirketi büyütmek ve yeniden yapılandırmak](docs/PHASE5_YONETIM.md)
 - [Şirket Merkezi paneli](docs/PHASE3_HQ.md)
 - [Ayrıntılı genel bakış](docs/GENEL_BAKIS.md) · [Kurulum](KURULUM_VE_KULLANIM.md) · [Mimari](docs/ARCHITECTURE.md) · [Yol haritası](docs/ROADMAP.md)
