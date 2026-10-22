@@ -43,7 +43,8 @@ def remove(pid, confirmation, files=False, path=None, queue_path=None):
         marker = original / '.studio' / projects.MARKER
         _plain(marker)
         if (original.parent != root or projects._inside_company(original) or
-                original == core.HOME or original in core.HOME.parents or original in core.BASE.parents or
+                original == core.HOME.resolve() or original in core.HOME.resolve().parents or
+                core.HOME.resolve() in original.parents or original in core.BASE.resolve().parents or
                 not marker.is_file() or marker.stat().st_size > 200 or
                 marker.read_text(encoding='utf-8').strip() != pid):
             raise ValueError('Klasör sahipliği doğrulanamadı. Yalnızca listeden kaldırabilirsiniz.')
@@ -112,6 +113,11 @@ def restore(pid, path=None):
             _plain(moved)
             if original.exists() or not moved.is_dir():
                 raise ValueError('Hedef klasör dolu veya çöp kutusundaki dosyalar taşınmış; geri yüklenmedi.')
+            marker = moved / '.studio' / projects.MARKER
+            _plain(marker)
+            if (not marker.is_file() or marker.stat().st_size > 200 or
+                    marker.read_text(encoding='utf-8').strip() != pid):
+                raise ValueError('Çöp kutusundaki klasörün bu projeye ait olduğu doğrulanamadı; geri yüklenmedi.')
         # Restored projects never resume AI automatically.
         for p in data['products']:
             if p['stage'] not in ('planlama', 'tamamlandi', 'iptal'):

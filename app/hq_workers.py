@@ -96,9 +96,17 @@ def approve(ident, path=None, queue_path=None):
 
 def reject(ident, reason='', path=None, queue_path=None):
     job = store.get_job(ident, path)
-    if job['status'] == 'delivered' and job['task_id']:
+    if job['status'] not in ('proposed', 'approved', 'delivered', 'blocked', 'failed'):
+        raise ValueError('Bu durumdaki iş reddedilemez')
+    if job['task_id']:
         import task_queue as q
-        q.request_rework(job['task_id'], reason or 'Patron teslimi kabul etmedi', path=queue_path)
+        task = q.get_task(job['task_id'], path=queue_path)
+        if task['status'] == 'running':
+            raise ValueError('Kuyruk görevi çalışıyor; önce tamamlanmasını bekleyin')
+        if job['status'] == 'delivered' and task['status'] == 'awaiting-acceptance':
+            q.request_rework(job['task_id'], reason or 'Patron teslimi kabul etmedi', path=queue_path)
+        elif task['status'] in ('pending-owner', 'ready', 'needs-attention'):
+            q.cancel(job['task_id'], path=queue_path)
     return store.transition(ident, ('proposed', 'approved', 'delivered', 'blocked', 'failed'), 'rejected',
                             reason or 'Patron reddetti', actor='patron', path=path)
 
@@ -130,6 +138,8 @@ def sync_code_jobs(path=None, queue_path=None):
         elif st == 'needs-attention':
             store.transition(job['id'], ('approved', 'running'), 'failed', t.get('result_note') or 'Kuyrukta takıldı',
                              path=path)
+        elif st == 'cancelled':
+            store.transition(job['id'], ('approved', 'running'), 'rejected', 'Görev kuyruğunda iptal edildi', path=path)
         elif st == 'accepted':
             store.transition(job['id'], ('approved', 'running'), 'accepted', 'Kuyrukta kabul edildi', path=path)
 
