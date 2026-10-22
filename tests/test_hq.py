@@ -186,6 +186,28 @@ class WorkerTests(Base):
         self.assertTrue(a['task_id'])
         self.assertEqual(q.get_task(a['task_id'], path=self.qdb)['status'], 'ready')
         self.assertEqual(workers.reject(j['id'], 'vazgeçtim', self.db, self.qdb)['status'], 'rejected')
+        self.assertEqual(q.get_task(a['task_id'], path=self.qdb)['status'], 'cancelled')
+        self.assertFalse(q.preview_next(path=self.qdb)['ready'])
+
+    def test_queue_cancellation_reaches_company(self):
+        import task_queue as q
+        store.update_settings({'default_project': str(self.project)}, self.db)
+        j = workers.add_department_job('oyun', 'Oyuncuya zıplama ekle', self.db)
+        a = workers.approve(j['id'], self.db, self.qdb)
+        q.cancel(a['task_id'], path=self.qdb)
+        workers.sync_code_jobs(self.db, self.qdb)
+        self.assertEqual(store.get_job(j['id'], self.db)['status'], 'rejected')
+
+    def test_reject_does_not_hide_running_queue_task(self):
+        import task_queue as q
+        store.update_settings({'default_project': str(self.project)}, self.db)
+        j = workers.add_department_job('oyun', 'Oyuncuya zıplama ekle', self.db)
+        a = workers.approve(j['id'], self.db, self.qdb)
+        with q._conn(self.qdb) as db:
+            db.execute("UPDATE tasks SET status='running' WHERE id=?", (a['task_id'],))
+        with self.assertRaises(ValueError):
+            workers.reject(j['id'], 'Dur', self.db, self.qdb)
+        self.assertEqual(store.get_job(j['id'], self.db)['status'], 'approved')
 
 
 class ServerTests(Base):

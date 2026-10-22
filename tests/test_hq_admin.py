@@ -161,3 +161,21 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(post('/api/admin/day-reset', body), 200)
         self.assertEqual(core.usage_count(), 0)
         self.assertEqual(len(projects.products(self.db)), 1)
+
+    def test_restore_rejects_replaced_folder_marker(self):
+        admin.remove(self.p['id'], 'Deneme', True, self.db)
+        moved = Path(admin.trash(self.db)[0]['moved'])
+        projects._mark(moved, 'another-project')
+        with self.assertRaises(ValueError):
+            admin.restore(self.p['id'], self.db)
+        self.assertFalse(self.folder.exists())
+        self.assertTrue(moved.exists())
+        self.assertEqual(projects.products(self.db), [])
+        self.assertEqual(len(admin.trash(self.db)), 1)
+
+    def test_remove_never_moves_company_state_subfolder(self):
+        with patch.object(core, 'HOME', self.products):
+            with self.assertRaises(ValueError):
+                admin.remove(self.p['id'], 'Deneme', True, self.db)
+        self.assertTrue(self.folder.exists())
+        self.assertEqual(len(projects.products(self.db)), 1)
